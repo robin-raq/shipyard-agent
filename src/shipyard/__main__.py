@@ -5,9 +5,11 @@ Run with: python -m shipyard
 
 from pathlib import Path
 
+from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 
 from shipyard.agent import build_graph
+from shipyard.tracing import TraceCollector
 
 
 def handle_context_file(filepath: str) -> str:
@@ -37,7 +39,10 @@ def handle_context_paste() -> str:
 
 def main():
     """Run the Shipyard agent REPL."""
+    load_dotenv()
+
     graph = build_graph()
+    trace_collector = TraceCollector()
     messages = []
     context = ""
 
@@ -71,6 +76,7 @@ def main():
             continue
 
         # Normal instruction — invoke the graph
+        trace_collector.start_trace(stripped)
         messages.append(HumanMessage(content=stripped))
         result = graph.invoke({
             "messages": messages,
@@ -81,6 +87,11 @@ def main():
         messages = list(result["messages"])
         last_msg = messages[-1]
         print(f"\n{last_msg.content}\n")
+
+        # Save local trace
+        trace_path = trace_collector.save_trace()
+        if trace_path:
+            print(f"[trace saved: {trace_path}]")
 
         # Clear context after use
         context = ""
