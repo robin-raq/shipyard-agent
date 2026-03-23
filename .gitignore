@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Traces (local JSON, not committed)
+traces/*.json
+
+# Backups from edit_file tool
+*.bak
+
+# OS
+.DS_Store
+
+# Study guide (personal reference)
+STUDY_GUIDE.md
