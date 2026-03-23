@@ -39,7 +39,10 @@ def handle_context_paste() -> str:
 
 def main():
     """Run the Shipyard agent REPL."""
-    load_dotenv()
+    load_dotenv(
+        dotenv_path=Path(__file__).resolve().parents[2] / ".env",
+        override=True,
+    )
 
     graph = build_graph()
     trace_collector = TraceCollector()

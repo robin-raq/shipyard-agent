@@ -14,9 +14,8 @@ from shipyard.prompts import build_system_prompt
 from shipyard.state import AgentState
 from shipyard.tools import ALL_TOOLS
 
-# Model setup — module-level so tests can patch it
-model = ChatAnthropic(model="claude-sonnet-4-5-20250929", temperature=0)
-model_with_tools = model.bind_tools(ALL_TOOLS)
+# Module-level reference used by agent_node at runtime
+model_with_tools = None
 
 
 def agent_node(state: AgentState) -> dict:
@@ -39,8 +38,12 @@ def should_continue(state: AgentState) -> str:
     return END
 
 
-def build_graph():
+def build_graph(llm=None):
     """Build and compile the Shipyard agent graph.
+
+    Args:
+        llm: Optional language model (with tools bound). If None,
+             creates a ChatAnthropic instance. Pass a mock for testing.
 
     Graph structure:
         START → agent → should_continue → tools | END
@@ -49,6 +52,13 @@ def build_graph():
     Returns:
         A compiled LangGraph StateGraph ready for .invoke().
     """
+    global model_with_tools
+    if llm is not None:
+        model_with_tools = llm
+    else:
+        model = ChatAnthropic(model="claude-sonnet-4-5-20250929", temperature=0)
+        model_with_tools = model.bind_tools(ALL_TOOLS)
+
     tool_node = ToolNode(ALL_TOOLS)
 
     graph = StateGraph(AgentState)

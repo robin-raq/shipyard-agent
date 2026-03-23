@@ -1,6 +1,6 @@
 """Tests for the LangGraph agent graph (all mocked, no API calls)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
@@ -8,18 +8,25 @@ from shipyard.agent import build_graph
 from shipyard.prompts import build_system_prompt
 
 
+def _mock_llm(*responses):
+    """Create a mock LLM that returns the given responses in sequence."""
+    mock = MagicMock()
+    mock.invoke.side_effect = list(responses)
+    return mock
+
+
 class TestBuildGraph:
     def test_graph_compiles(self):
         """build_graph() should return a compiled graph without errors."""
-        graph = build_graph()
+        mock = _mock_llm()
+        graph = build_graph(llm=mock)
         assert graph is not None
 
-    @patch("shipyard.agent.model_with_tools")
-    def test_handles_simple_message(self, mock_model):
+    def test_handles_simple_message(self):
         """When the LLM returns plain text (no tool calls), the graph completes."""
-        mock_model.invoke.return_value = AIMessage(content="Hello! How can I help?")
+        mock = _mock_llm(AIMessage(content="Hello! How can I help?"))
 
-        graph = build_graph()
+        graph = build_graph(llm=mock)
         result = graph.invoke({
             "messages": [HumanMessage(content="hi")],
             "context": "",
@@ -30,10 +37,8 @@ class TestBuildGraph:
         last_msg = result["messages"][-1]
         assert last_msg.content == "Hello! How can I help?"
 
-    @patch("shipyard.agent.model_with_tools")
-    def test_routes_to_tools_on_tool_call(self, mock_model):
+    def test_routes_to_tools_on_tool_call(self):
         """When the LLM returns a tool call, the graph routes to tool execution."""
-        # First call: LLM wants to call a tool
         tool_call_msg = AIMessage(
             content="",
             tool_calls=[{
@@ -42,25 +47,21 @@ class TestBuildGraph:
                 "args": {"path": "/tmp/test.txt"},
             }],
         )
-        # Second call: LLM responds with final answer
         final_msg = AIMessage(content="File read successfully.")
+        mock = _mock_llm(tool_call_msg, final_msg)
 
-        mock_model.invoke.side_effect = [tool_call_msg, final_msg]
-
-        graph = build_graph()
+        graph = build_graph(llm=mock)
         result = graph.invoke({
             "messages": [HumanMessage(content="read /tmp/test.txt")],
             "context": "",
             "trace_steps": [],
         })
 
-        # Graph should have called the model twice (tool call + final)
-        assert mock_model.invoke.call_count == 2
+        assert mock.invoke.call_count == 2
         last_msg = result["messages"][-1]
         assert last_msg.content == "File read successfully."
 
-    @patch("shipyard.agent.model_with_tools")
-    def test_graph_loops_tool_then_response(self, mock_model):
+    def test_graph_loops_tool_then_response(self):
         """The graph loops: agent → tools → agent → end."""
         tool_call = AIMessage(
             content="",
@@ -71,10 +72,9 @@ class TestBuildGraph:
             }],
         )
         final = AIMessage(content="Here are the files.")
+        mock = _mock_llm(tool_call, final)
 
-        mock_model.invoke.side_effect = [tool_call, final]
-
-        graph = build_graph()
+        graph = build_graph(llm=mock)
         result = graph.invoke({
             "messages": [HumanMessage(content="list files in /tmp")],
             "context": "",
@@ -82,7 +82,6 @@ class TestBuildGraph:
         })
 
         msgs = result["messages"]
-        # Should contain: HumanMessage, AIMessage (tool call), ToolMessage, AIMessage (final)
         types = [type(m).__name__ for m in msgs]
         assert "ToolMessage" in types
         assert types[-1] == "AIMessage"
