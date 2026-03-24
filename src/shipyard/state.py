@@ -5,6 +5,21 @@ from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
 
 
+class TaskItem(TypedDict):
+    """A single subtask assigned to a worker agent.
+
+    Fields:
+        worker: Which worker handles this ("backend", "frontend", "database", "shared").
+        description: What the worker should do.
+        status: Current status ("pending", "done", "failed").
+        result: Summary returned by the worker when complete.
+    """
+    worker: str
+    description: str
+    status: str
+    result: str
+
+
 class AgentState(TypedDict):
     """State that flows through every node in the agent graph.
 
@@ -16,5 +31,22 @@ class AgentState(TypedDict):
         trace_steps: Accumulator for local JSON trace steps during a run.
     """
     messages: Annotated[list, add_messages]
+    context: str
+    trace_steps: list
+
+
+class SupervisorState(TypedDict):
+    """State for the supervisor multi-agent graph.
+
+    Fields:
+        messages: Conversation history with the user.
+        tasks: Ordered list of subtasks assigned to workers.
+        current_task_index: Index of the task currently being executed.
+        context: Injected context from /context command.
+        trace_steps: Accumulator for local JSON trace steps.
+    """
+    messages: Annotated[list, add_messages]
+    tasks: list[TaskItem]
+    current_task_index: int
     context: str
     trace_steps: list

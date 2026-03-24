@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from shipyard.agent import build_graph
+from shipyard.supervisor import build_supervisor_graph
 from shipyard.tracing import TraceCollector
 
 
@@ -45,12 +46,13 @@ def main():
     )
 
     graph = build_graph()
+    mode = "single"
     trace_collector = TraceCollector()
     messages = []
     context = ""
 
     print("Shipyard agent v0.1.0")
-    print("Commands: /quit, /context <filepath>, /context paste")
+    print("Commands: /quit, /multi, /single, /context <filepath>, /context paste")
     print()
 
     while True:
@@ -69,6 +71,21 @@ def main():
         if stripped == "":
             continue
 
+        # Mode switching commands
+        if stripped == "/multi":
+            graph = build_supervisor_graph()
+            mode = "multi"
+            messages = []
+            print("Switched to multi-agent mode (supervisor + workers).")
+            continue
+
+        if stripped == "/single":
+            graph = build_graph()
+            mode = "single"
+            messages = []
+            print("Switched to single-agent mode.")
+            continue
+
         # Context injection commands
         if stripped.startswith("/context "):
             arg = stripped[len("/context "):].strip()
@@ -81,11 +98,17 @@ def main():
         # Normal instruction — invoke the graph
         trace_collector.start_trace(stripped)
         messages.append(HumanMessage(content=stripped))
-        result = graph.invoke({
+
+        invoke_state = {
             "messages": messages,
             "context": context,
             "trace_steps": [],
-        })
+        }
+        if mode == "multi":
+            invoke_state["tasks"] = []
+            invoke_state["current_task_index"] = 0
+
+        result = graph.invoke(invoke_state)
 
         messages = list(result["messages"])
         last_msg = messages[-1]

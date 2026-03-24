@@ -139,3 +139,53 @@ class TestREPL:
         call_args = mock_graph.invoke.call_args[0][0]
         assert "line one" in call_args["context"]
         assert "line two" in call_args["context"]
+
+
+class TestMultiAgentMode:
+    @patch("shipyard.__main__.build_supervisor_graph")
+    @patch("shipyard.__main__.build_graph")
+    @patch("builtins.input")
+    def test_multi_command_switches_to_supervisor(self, mock_input, mock_build, mock_build_sup):
+        """'/multi' should switch to the supervisor graph."""
+        mock_single_graph = MagicMock()
+        mock_sup_graph = MagicMock()
+        mock_sup_graph.invoke.return_value = {
+            "messages": [
+                HumanMessage(content="build it"),
+                AIMessage(content="Decomposed into 2 tasks."),
+            ],
+        }
+        mock_build.return_value = mock_single_graph
+        mock_build_sup.return_value = mock_sup_graph
+        mock_input.side_effect = ["/multi", "build it", "/quit"]
+
+        from shipyard.__main__ import main
+        main()
+
+        # Supervisor graph should have been invoked, not the single graph
+        mock_sup_graph.invoke.assert_called_once()
+        mock_single_graph.invoke.assert_not_called()
+
+    @patch("shipyard.__main__.build_supervisor_graph")
+    @patch("shipyard.__main__.build_graph")
+    @patch("builtins.input")
+    def test_single_command_switches_back(self, mock_input, mock_build, mock_build_sup):
+        """'/single' after '/multi' should switch back to single agent."""
+        mock_single_graph = MagicMock()
+        mock_sup_graph = MagicMock()
+        mock_single_graph.invoke.return_value = {
+            "messages": [
+                HumanMessage(content="hello"),
+                AIMessage(content="Hi there!"),
+            ],
+        }
+        mock_build.return_value = mock_single_graph
+        mock_build_sup.return_value = mock_sup_graph
+        mock_input.side_effect = ["/multi", "/single", "hello", "/quit"]
+
+        from shipyard.__main__ import main
+        main()
+
+        # Single graph should have been invoked, not supervisor
+        mock_single_graph.invoke.assert_called_once()
+        mock_sup_graph.invoke.assert_not_called()

@@ -164,6 +164,85 @@ This self-correction loop happens naturally within the LangGraph agent↔tools c
 
 ---
 
+## Multi-Agent Architecture
+
+### Overview
+
+Shipyard supports two modes:
+- **Single-agent mode** (`/single`): The original agent loop described above
+- **Multi-agent mode** (`/multi`): A supervisor-worker system for complex, multi-file tasks
+
+### Supervisor Graph Structure
+
+```
+START → decompose → execute_next_task → check_if_done ──→ execute_next_task (loop)
+                                              └──→ validate → END
+```
+
+- **`decompose` node:** Calls the supervisor LLM with a specialized prompt. The LLM returns a JSON task plan — an ordered list of subtasks, each assigned to a worker role.
+- **`execute_next_task` node:** Looks up the current task, invokes the corresponding worker subgraph, and stores the result. Passes prior worker results as context so workers build on each other's work.
+- **`check_if_done` edge:** If more tasks remain, loop back to `execute_next_task`. Otherwise, route to `validate`.
+- **`validate` node:** Summarizes all task results into a final response.
+
+### Worker Roles
+
+| Worker | Scope | Domain Knowledge |
+|--------|-------|-----------------|
+| Backend | `api/` directory | Express routes, middleware, WebSocket |
+| Frontend | `web/` directory | React components, TailwindCSS, Vite |
+| Database | migrations, schema | PostgreSQL DDL, seeds |
+| Shared | `shared/` directory | TypeScript interfaces, types |
+
+### Worker Graph (Factory Pattern)
+
+Each worker is built from a single factory function (`build_worker_graph`) with the same structure as the single-agent graph:
+
+```
+START → agent → should_continue → tools | END
+                                  tools → agent (loop)
+```
+
+Workers share the same 5 tools but have role-specific system prompts that scope their domain. The factory uses **closures** (not globals) so multiple workers coexist without interference.
+
+### State Schemas
+
+```python
+class TaskItem(TypedDict):
+    worker: str          # "backend" | "frontend" | "database" | "shared"
+    description: str     # What the worker should do
+    status: str          # "pending" | "done" | "failed"
+    result: str          # Worker's summary when complete
+
+class SupervisorState(TypedDict):
+    messages: Annotated[list, add_messages]  # Conversation history
+    tasks: list[TaskItem]                     # Ordered task plan
+    current_task_index: int                   # Current position in plan
+    context: str                              # Injected context
+    trace_steps: list                         # Local trace data
+```
+
+### Sequential Execution (Not Parallel)
+
+Workers execute **one at a time** in dependency order. The supervisor LLM decides the ordering during decomposition (typically: shared types → database schema → backend routes → frontend components). Each worker receives prior workers' results as context.
+
+**Why not parallel:** Workers often depend on each other (e.g., frontend needs backend routes to exist). Sequential execution avoids file conflicts and is much simpler to trace and debug.
+
+### Task Decomposition Example
+
+User instruction: "Build the Issues feature"
+
+Supervisor decomposes into:
+```json
+[
+  {"worker": "shared", "description": "Define Issue TypeScript interface"},
+  {"worker": "database", "description": "Create documents table migration"},
+  {"worker": "backend", "description": "Create CRUD routes at /api/issues"},
+  {"worker": "frontend", "description": "Create Issues list and detail components"}
+]
+```
+
+---
+
 ## Running the Agent
 
 ```bash
@@ -174,10 +253,17 @@ cp .env.example .env  # Add your ANTHROPIC_API_KEY and LANGSMITH_API_KEY
 # Run
 python -m shipyard
 
-# Example session
+# Single-agent mode (default)
 shipyard> Read src/app.py and add error handling to the main function
 shipyard> /context specs/api_spec.md
 shipyard> Build the /health endpoint according to the spec
+
+# Switch to multi-agent mode
+shipyard> /multi
+shipyard> Build the Issues feature with database, API, and React components
+
+# Switch back
+shipyard> /single
 shipyard> /quit
 ```
 
@@ -185,14 +271,17 @@ shipyard> /quit
 
 ## Test Suite
 
-41 tests across 5 test files:
+74 tests across 8 test files:
 
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_tools.py` | 22 | All 5 tools: happy path, error cases, edge cases |
 | `test_agent.py` | 5 | Graph compilation, routing, tool loops, system prompt |
-| `test_repl.py` | 6 | REPL commands, context injection, quit handling |
+| `test_repl.py` | 8 | REPL commands, context injection, mode switching |
 | `test_tracing.py` | 5 | Trace file creation, step collection, timing |
-| `test_state.py` | 3 | State schema validation |
+| `test_state.py` | 9 | AgentState, TaskItem, SupervisorState validation |
+| `test_worker.py` | 5 | Worker factory: compilation, routing, prompts, isolation |
+| `test_worker_prompts.py` | 8 | Prompt content: base rules, scoping, JSON output |
+| `test_supervisor.py` | 13 | Decomposition, execution, routing, validation, full flow |
 
 Run with: `pytest -v`
