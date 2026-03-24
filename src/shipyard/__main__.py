@@ -6,7 +6,7 @@ Run with: python -m shipyard
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from shipyard.agent import build_graph
 from shipyard.tracing import TraceCollector
@@ -90,6 +90,23 @@ def main():
         messages = list(result["messages"])
         last_msg = messages[-1]
         print(f"\n{last_msg.content}\n")
+
+        # Extract tool steps from the graph result for local tracing
+        tool_calls_by_id = {}
+        for msg in messages:
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    tool_calls_by_id[tc["id"]] = tc
+            elif isinstance(msg, ToolMessage):
+                tc = tool_calls_by_id.get(msg.tool_call_id)
+                if tc:
+                    output = msg.content if len(msg.content) <= 500 else msg.content[:500] + "..."
+                    trace_collector.add_step(
+                        action=tc["name"],
+                        input_data=tc["args"],
+                        output=output,
+                        duration_ms=0,
+                    )
 
         # Save local trace
         trace_path = trace_collector.save_trace()
