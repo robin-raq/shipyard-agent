@@ -11,11 +11,12 @@ Graph shape:
 import json
 import re
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
+from shipyard.models import get_llm_for_role
 from shipyard.state import SupervisorState
+from shipyard.tools import ALL_TOOLS
 from shipyard.worker import build_worker_graph
 from shipyard.worker_prompts import SUPERVISOR_PROMPT, WORKER_PROMPTS
 
@@ -140,18 +141,21 @@ def build_supervisor_graph(llm=None, worker_llm=None):
         A compiled LangGraph StateGraph.
     """
     if llm is None:
-        model = ChatAnthropic(model="claude-sonnet-4-5-20250929", temperature=0)
-        supervisor_llm = model
+        supervisor_llm = get_llm_for_role("supervisor")
     else:
         supervisor_llm = llm
 
-    # Build worker graphs for each role
+    # Build worker graphs for each role, using cost-optimized model selection
     worker_graphs = {}
     for role, prompt in WORKER_PROMPTS.items():
+        if worker_llm is not None:
+            bound = worker_llm
+        else:
+            bound = get_llm_for_role(role).bind_tools(ALL_TOOLS)
         worker_graphs[role] = build_worker_graph(
             role=role,
             system_prompt=prompt,
-            llm=worker_llm,
+            llm=bound,
         )
 
     # Create node functions that close over the LLM and worker graphs
