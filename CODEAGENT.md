@@ -227,6 +227,24 @@ Workers execute **one at a time** in dependency order. The supervisor LLM decide
 
 **Why not parallel:** Workers often depend on each other (e.g., frontend needs backend routes to exist). Sequential execution avoids file conflicts and is much simpler to trace and debug.
 
+### Cost-Optimized Model Selection
+
+The multi-agent system routes each role to the most cost-effective LLM:
+
+| Role | Provider | Model | Why |
+|------|----------|-------|-----|
+| Supervisor | OpenAI | GPT-4o-mini | JSON decomposition is structured/predictable |
+| Shared Worker | OpenAI | GPT-4o-mini | TypeScript interfaces are template-like |
+| Database Worker | OpenAI | GPT-4o-mini | SQL DDL is highly structured |
+| Backend Worker | Anthropic | Claude Sonnet | Complex multi-step editing needs accuracy |
+| Frontend Worker | Anthropic | Claude Sonnet | React components need surgical precision |
+
+**Fallback:** If `OPENAI_API_KEY` is not set, all roles use Claude Sonnet automatically. OpenAI is purely additive — the system works with just an Anthropic key.
+
+**Cost impact:** GPT-4o-mini is ~20x cheaper per token than Claude Sonnet. Routing supervisor + simple workers to it reduces multi-agent costs significantly while keeping editing quality high where it matters.
+
+Model selection lives in `src/shipyard/models.py` with a `ROLE_MODEL_MAP` dict and a `get_llm_for_role(role, force_provider=None)` function.
+
 ### Task Decomposition Example
 
 User instruction: "Build the Issues feature"
@@ -248,7 +266,7 @@ Supervisor decomposes into:
 ```bash
 # Setup
 pip install -e .
-cp .env.example .env  # Add your ANTHROPIC_API_KEY and LANGSMITH_API_KEY
+cp .env.example .env  # Add your ANTHROPIC_API_KEY, LANGSMITH_API_KEY, and optionally OPENAI_API_KEY
 
 # Run
 python -m shipyard
@@ -271,7 +289,7 @@ shipyard> /quit
 
 ## Test Suite
 
-74 tests across 8 test files:
+82 tests across 9 test files:
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -283,5 +301,6 @@ shipyard> /quit
 | `test_worker.py` | 5 | Worker factory: compilation, routing, prompts, isolation |
 | `test_worker_prompts.py` | 8 | Prompt content: base rules, scoping, JSON output |
 | `test_supervisor.py` | 13 | Decomposition, execution, routing, validation, full flow |
+| `test_models.py` | 8 | Model selection: role mapping, fallback, force override |
 
 Run with: `pytest -v`
