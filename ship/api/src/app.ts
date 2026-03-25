@@ -36,7 +36,10 @@ export function createApp(pool: pg.Pool): Express {
   app.use(express.static(webDistPath));
 
   // SPA fallback — serve index.html for all non-API routes
-  app.get("*", (_req, res, next) => {
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) {
+      return next();
+    }
     const indexPath = path.join(webDistPath, "index.html");
     res.sendFile(indexPath, (err) => {
       if (err) next();
