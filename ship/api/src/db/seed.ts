@@ -1,63 +1,62 @@
 import "dotenv/config";
 import pool from "./pool.js";
 
-const documentTypes = ["doc", "issue", "project", "week", "team"] as const;
-
-const sampleDocuments = [
-  // doc type
+const sampleDocs = [
   {
     title: "Getting Started Guide",
     content: "This guide will help you get started with the Ship platform. Follow these steps to set up your workspace and create your first document.",
-    document_type: "doc",
   },
   {
     title: "API Documentation",
     content: "Complete API reference for the Ship platform. Includes endpoints, authentication, and examples.",
-    document_type: "doc",
   },
-  // issue type
+];
+
+const sampleIssues = [
   {
     title: "Fix login bug",
     content: "Users are reporting that they cannot log in with their email address. Need to investigate the authentication flow.",
-    document_type: "issue",
+    status: "open",
+    priority: "high",
   },
   {
     title: "Improve performance on dashboard",
     content: "Dashboard is loading slowly when there are many documents. Consider implementing pagination or lazy loading.",
-    document_type: "issue",
+    status: "in_progress",
+    priority: "medium",
   },
-  // project type
+];
+
+const sampleProjects = [
   {
     title: "Q1 Product Roadmap",
     content: "Key initiatives for Q1 include: new document editor, improved search, and mobile app launch.",
-    document_type: "project",
   },
   {
     title: "Marketing Website Redesign",
     content: "Complete redesign of the marketing website with new branding, improved messaging, and better conversion funnel.",
-    document_type: "project",
   },
-  // week type
+];
+
+const sampleWeeks = [
   {
     title: "Week of Jan 15, 2024",
     content: "This week we shipped the new editor, fixed 12 bugs, and onboarded 3 new customers. Next week focus on performance improvements.",
-    document_type: "week",
   },
   {
     title: "Week of Jan 22, 2024",
     content: "Performance improvements deployed. Dashboard load time reduced by 40%. Started work on mobile app prototype.",
-    document_type: "week",
   },
-  // team type
+];
+
+const sampleTeams = [
   {
     title: "Engineering Team",
     content: "The engineering team consists of 8 developers working on backend, frontend, and mobile. We use agile methodology with 2-week sprints.",
-    document_type: "team",
   },
   {
     title: "Product Team",
     content: "Product team includes 3 product managers and 2 designers. Responsible for roadmap planning, user research, and design.",
-    document_type: "team",
   },
 ];
 
@@ -65,26 +64,70 @@ async function seed() {
   try {
     console.log("Starting database seed...");
 
-    // Clear existing documents
-    await pool.query("DELETE FROM documents");
-    console.log("Cleared existing documents");
+    // Clear existing data
+    await pool.query("DELETE FROM docs");
+    await pool.query("DELETE FROM issues");
+    await pool.query("DELETE FROM projects");
+    await pool.query("DELETE FROM weeks");
+    await pool.query("DELETE FROM teams");
+    console.log("Cleared existing data");
 
-    // Insert sample documents
-    for (const doc of sampleDocuments) {
+    // Insert sample docs
+    for (const doc of sampleDocs) {
       await pool.query(
-        `INSERT INTO documents (title, content, document_type)
-         VALUES ($1, $2, $3)`,
-        [doc.title, doc.content, doc.document_type]
+        `INSERT INTO docs (title, content)
+         VALUES ($1, $2)`,
+        [doc.title, doc.content]
       );
-      console.log(`✓ Inserted: ${doc.title} (${doc.document_type})`);
+      console.log(`✓ Inserted doc: ${doc.title}`);
     }
 
-    console.log(`\nSuccessfully seeded ${sampleDocuments.length} documents`);
-    console.log(`- 2 docs`);
-    console.log(`- 2 issues`);
-    console.log(`- 2 projects`);
-    console.log(`- 2 weeks`);
-    console.log(`- 2 teams`);
+    // Insert sample issues
+    for (const issue of sampleIssues) {
+      await pool.query(
+        `INSERT INTO issues (title, content, status, priority)
+         VALUES ($1, $2, $3, $4)`,
+        [issue.title, issue.content, issue.status, issue.priority]
+      );
+      console.log(`✓ Inserted issue: ${issue.title}`);
+    }
+
+    // Insert sample projects
+    for (const project of sampleProjects) {
+      await pool.query(
+        `INSERT INTO projects (title, content)
+         VALUES ($1, $2)`,
+        [project.title, project.content]
+      );
+      console.log(`✓ Inserted project: ${project.title}`);
+    }
+
+    // Insert sample weeks
+    for (const week of sampleWeeks) {
+      await pool.query(
+        `INSERT INTO weeks (title, content)
+         VALUES ($1, $2)`,
+        [week.title, week.content]
+      );
+      console.log(`✓ Inserted week: ${week.title}`);
+    }
+
+    // Insert sample teams
+    for (const team of sampleTeams) {
+      await pool.query(
+        `INSERT INTO teams (title, content)
+         VALUES ($1, $2)`,
+        [team.title, team.content]
+      );
+      console.log(`✓ Inserted team: ${team.title}`);
+    }
+
+    console.log(`\nSuccessfully seeded database:`);
+    console.log(`- ${sampleDocs.length} docs`);
+    console.log(`- ${sampleIssues.length} issues`);
+    console.log(`- ${sampleProjects.length} projects`);
+    console.log(`- ${sampleWeeks.length} weeks`);
+    console.log(`- ${sampleTeams.length} teams`);
 
     await pool.end();
     process.exit(0);

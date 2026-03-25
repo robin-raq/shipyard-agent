@@ -4,6 +4,11 @@ import pg from "pg";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createDocumentsRouter } from "./routes/documents.js";
+import { createDocsRouter } from "./routes/docs.js";
+import { createIssuesRouter } from "./routes/issues.js";
+import { createProjectsRouter } from "./routes/projects.js";
+import { createWeeksRouter } from "./routes/weeks.js";
+import { createTeamsRouter } from "./routes/teams.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,7 +22,12 @@ export function createApp(pool: pg.Pool): Express {
   app.use(express.json());
 
   // API Routes
-  app.use("/api/documents", createDocumentsRouter(pool));
+  app.use("/api/documents", createDocumentsRouter(pool)); // backward compatibility
+  app.use("/api/docs", createDocsRouter(pool));
+  app.use("/api/issues", createIssuesRouter(pool));
+  app.use("/api/projects", createProjectsRouter(pool));
+  app.use("/api/weeks", createWeeksRouter(pool));
+  app.use("/api/teams", createTeamsRouter(pool));
 
   // Serve static files from web client (Docker: /app/public, dev: ../../web/dist)
   const webDistPath = process.env.NODE_ENV === "production"
