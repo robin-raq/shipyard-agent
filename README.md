@@ -113,6 +113,7 @@ shipyard> /quit
 | `/quit` | Exit the agent |
 | `/multi` | Switch to multi-agent mode (supervisor + workers) |
 | `/single` | Switch to single-agent mode |
+| `/revert <filepath>` | Restore a file from its `.bak` backup |
 | `/context <filepath>` | Inject a file as context for the next instruction |
 | `/context paste` | Paste text as context (empty line to finish) |
 
@@ -122,7 +123,7 @@ shipyard> /quit
 pytest -v
 ```
 
-All 104 tests run offline with mocked LLMs — no API keys needed for testing.
+All 109 tests run offline with mocked LLMs — no API keys needed for testing.
 
 ## Project Structure
 

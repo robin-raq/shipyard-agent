@@ -6,7 +6,7 @@
 
 ### Overview
 
-Shipyard is a **single-agent, tool-using system** built on LangGraph's `StateGraph`. The agent runs in a persistent REPL loop, accepting natural language instructions and executing them by calling tools (read, edit, create files; run shell commands).
+Shipyard is a **dual-mode coding agent** built on LangGraph's `StateGraph`. It supports single-agent mode (one tool-calling loop) and multi-agent mode (supervisor decomposes tasks and dispatches to specialized workers). The agent runs in a persistent REPL loop, accepting natural language instructions and executing them by calling tools (read, edit, create files; run commands). Tool calls are displayed in real time so you can watch the agent's reasoning.
 
 ### Graph Structure
 
@@ -115,9 +115,13 @@ This self-correction loop happens naturally within the LangGraph agent↔tools c
 
 ### Safety Measures
 
-- **Backup files:** Every edit creates a `.bak` copy for revert capability
+- **Workspace sandbox:** All file tools resolve paths under a configurable workspace root; `../` traversal and symlink escapes are rejected
+- **Backup + revert:** Every edit creates a `.bak` copy; `/revert <filepath>` restores it
+- **Before/after diff:** `edit_file` returns a before/after snippet so both the LLM and the user can see exactly what changed
 - **No overwrites:** `create_file` refuses to overwrite existing files
-- **Command sandboxing:** `run_command` blocks dangerous patterns (`rm -rf /`, `sudo`, `dd`, fork bombs)
+- **Command allowlist:** `run_command` uses `shell=False` with an explicit allowlist of programs (git, npm, node, pytest, etc.) — no shell injection possible
+- **Read file cap:** Files over 500 lines are truncated to limit token cost
+- **Trace redaction:** API keys and secrets are stripped from trace output before writing to disk
 - **Timeout:** Shell commands have a 30-second timeout
 
 ---
@@ -272,9 +276,10 @@ cp .env.example .env  # Add your ANTHROPIC_API_KEY, LANGSMITH_API_KEY, and optio
 python -m shipyard
 
 # Single-agent mode (default)
-shipyard> Read src/app.py and add error handling to the main function
-shipyard> /context specs/api_spec.md
-shipyard> Build the /health endpoint according to the spec
+shipyard> Read test_workspace/math_utils.py and add a multiply function
+shipyard> /context test_workspace/api_spec.md
+shipyard> Add the /health endpoint to test_workspace/routes.ts according to the spec
+shipyard> /revert test_workspace/routes.ts
 
 # Switch to multi-agent mode
 shipyard> /multi
@@ -289,18 +294,18 @@ shipyard> /quit
 
 ## Test Suite
 
-82 tests across 9 test files:
+109 tests across 9 test files:
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| `test_tools.py` | 22 | All 5 tools: happy path, error cases, edge cases |
-| `test_agent.py` | 5 | Graph compilation, routing, tool loops, system prompt |
-| `test_repl.py` | 8 | REPL commands, context injection, mode switching |
-| `test_tracing.py` | 5 | Trace file creation, step collection, timing |
+| `test_tools.py` | 35 | All 5 tools, workspace sandbox, command allowlist, read cap, before/after |
+| `test_agent.py` | 6 | Graph compilation, routing, tool loops, system prompt |
+| `test_repl.py` | 11 | REPL commands, context injection, mode switching, /revert |
+| `test_tracing.py` | 10 | Trace file creation, step collection, timing, secret redaction |
 | `test_state.py` | 9 | AgentState, TaskItem, SupervisorState validation |
 | `test_worker.py` | 5 | Worker factory: compilation, routing, prompts, isolation |
 | `test_worker_prompts.py` | 8 | Prompt content: base rules, scoping, JSON output |
-| `test_supervisor.py` | 13 | Decomposition, execution, routing, validation, full flow |
+| `test_supervisor.py` | 15 | Decomposition, execution, routing, validation, worker allowlist |
 | `test_models.py` | 8 | Model selection: role mapping, fallback, force override |
 
 Run with: `pytest -v`
