@@ -1,69 +1,79 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDocuments, deleteDocument, createDocument } from '../api/client';
 import DocumentForm from './DocumentForm';
 
-interface Document {
+interface Item {
   id: string;
-  title: string;
+  title?: string;
+  name?: string;
   content: string;
-  type: string;
   created_at: string;
 }
 
 interface DocumentListProps {
-  documentType: string;
+  entityType: string;
   heading: string;
+  fetchItems: () => Promise<any[]>;
+  createItem: (data: any) => Promise<any>;
+  deleteItem: (id: string) => Promise<any>;
+  titleField?: 'title' | 'name';
 }
 
-export default function DocumentList({ documentType, heading }: DocumentListProps) {
-  const [documents, setDocuments] = useState<Document[]>([]);
+export default function DocumentList({ 
+  entityType, 
+  heading, 
+  fetchItems,
+  createItem,
+  deleteItem,
+  titleField = 'title'
+}: DocumentListProps) {
+  const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const navigate = useNavigate();
 
-  const fetchDocuments = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getDocuments(documentType);
-      setDocuments(data);
+      const data = await fetchItems();
+      setItems(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch documents');
+      setError(err instanceof Error ? err.message : 'Failed to fetch items');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDocuments();
-  }, [documentType]);
+    fetchData();
+  }, []);
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this document?')) return;
+    if (!confirm('Are you sure you want to delete this item?')) return;
 
     try {
-      await deleteDocument(id);
-      await fetchDocuments();
+      await deleteItem(id);
+      await fetchData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete document');
+      alert(err instanceof Error ? err.message : 'Failed to delete item');
     }
   };
 
   const handleCreate = async (data: { title: string; content: string }) => {
     try {
-      await createDocument({ ...data, type: documentType });
+      await createItem(data);
       setShowCreateForm(false);
-      await fetchDocuments();
+      await fetchData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create document');
+      alert(err instanceof Error ? err.message : 'Failed to create item');
     }
   };
 
   const handleRowClick = (id: string) => {
-    navigate(`/${documentType}/${id}`);
+    navigate(`/${entityType}/${id}`);
   };
 
   if (loading) {
@@ -100,7 +110,7 @@ export default function DocumentList({ documentType, heading }: DocumentListProp
       )}
 
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-        {documents.length === 0 ? (
+        {items.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             No {heading.toLowerCase()} found. Create one to get started!
           </div>
@@ -109,7 +119,7 @@ export default function DocumentList({ documentType, heading }: DocumentListProp
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Title
+                  {titleField === 'name' ? 'Name' : 'Title'}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created
@@ -120,21 +130,21 @@ export default function DocumentList({ documentType, heading }: DocumentListProp
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {documents.map((doc) => (
+              {items.map((item) => (
                 <tr
-                  key={doc.id}
-                  onClick={() => handleRowClick(doc.id)}
+                  key={item.id}
+                  onClick={() => handleRowClick(item.id)}
                   className="hover:bg-gray-50 cursor-pointer transition-colors"
                 >
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    {doc.title}
+                    {titleField === 'name' ? item.name : item.title}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(doc.created_at).toLocaleDateString()}
+                    {new Date(item.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 text-right text-sm">
                     <button
-                      onClick={(e) => handleDelete(doc.id, e)}
+                      onClick={(e) => handleDelete(item.id, e)}
                       className="text-red-600 hover:text-red-800 font-medium"
                     >
                       Delete

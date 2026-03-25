@@ -7,6 +7,7 @@ export default function Layout() {
     { path: '/docs', label: 'Documents', icon: '📄' },
     { path: '/issues', label: 'Issues', icon: '🐛' },
     { path: '/projects', label: 'Projects', icon: '📁' },
+    { path: '/weeks', label: 'Weeks', icon: '📅' },
     { path: '/teams', label: 'Teams', icon: '👥' },
   ];
 

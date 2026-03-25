@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import DocsPage from './pages/DocsPage';
 import IssuesPage from './pages/IssuesPage';
 import ProjectsPage from './pages/ProjectsPage';
+import WeeksPage from './pages/WeeksPage';
 import TeamsPage from './pages/TeamsPage';
 import DocumentDetailPage from './pages/DocumentDetailPage';
 
@@ -15,6 +16,7 @@ export default function App() {
           <Route path="docs" element={<DocsPage />} />
           <Route path="issues" element={<IssuesPage />} />
           <Route path="projects" element={<ProjectsPage />} />
+          <Route path="weeks" element={<WeeksPage />} />
           <Route path="teams" element={<TeamsPage />} />
           <Route path=":type/:id" element={<DocumentDetailPage />} />
         </Route>
