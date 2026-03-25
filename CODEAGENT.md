@@ -159,7 +159,7 @@ This self-correction loop happens naturally within the LangGraph agent↔tools c
 
 ### LangSmith Trace Links
 
-- **Trace 1 (successful edit):** [read → edit → verify → success](https://smith.langchain.com/o/default/projects/p/f9af7ac3-9f95-46cf-8680-20f2b39a5bf0/r/019d1d7c-6f22-7c21-a78f-503d7efc3130)
+- **Trace 1 (successful edit):** [read → edit → verify → success](https://smith.langchain.com/public/0a29d308-91be-44f6-8fbf-44ee7045fa87/r)
 - **Trace 2 (error branch):** [read fails → list_files → graceful recovery](https://smith.langchain.com/public/294b5d73-e118-4f61-9e64-d82c7fda07ce/r)
 
 ---
