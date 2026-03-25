@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from shipyard.agent import build_graph
 from shipyard.supervisor import build_supervisor_graph
+from shipyard.tools import set_workspace
 from shipyard.tracing import TraceCollector
 
 
@@ -57,6 +58,7 @@ def main():
         override=True,
     )
 
+    set_workspace(Path.cwd())
     graph = build_graph()
     mode = "single"
     trace_collector = TraceCollector()
