@@ -111,25 +111,33 @@ def main():
         result = graph.invoke(invoke_state)
 
         messages = list(result["messages"])
-        last_msg = messages[-1]
-        print(f"\n{last_msg.content}\n")
 
-        # Extract tool steps from the graph result for local tracing
+        # Display tool calls that happened during this invocation
+        # (new messages start after the user's HumanMessage we just appended)
+        new_messages = messages[len(messages) - len(result["messages"]) :]
         tool_calls_by_id = {}
-        for msg in messages:
+        for msg in new_messages:
             if isinstance(msg, AIMessage) and msg.tool_calls:
                 for tc in msg.tool_calls:
                     tool_calls_by_id[tc["id"]] = tc
+                    args_str = ", ".join(f"{k}={v!r}" for k, v in tc["args"].items())
+                    print(f"  -> {tc['name']}({args_str})")
             elif isinstance(msg, ToolMessage):
                 tc = tool_calls_by_id.get(msg.tool_call_id)
+                output = msg.content if len(msg.content) <= 200 else msg.content[:200] + "..."
+                status = "ok" if "error" not in output.lower() else "err"
+                print(f"     [{status}] {output[:80]}")
                 if tc:
-                    output = msg.content if len(msg.content) <= 500 else msg.content[:500] + "..."
+                    full_output = msg.content if len(msg.content) <= 500 else msg.content[:500] + "..."
                     trace_collector.add_step(
                         action=tc["name"],
                         input_data=tc["args"],
-                        output=output,
+                        output=full_output,
                         duration_ms=0,
                     )
+
+        last_msg = messages[-1]
+        print(f"\n{last_msg.content}\n")
 
         # Save local trace
         trace_path = trace_collector.save_trace()
