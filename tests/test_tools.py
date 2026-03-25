@@ -8,6 +8,10 @@ from shipyard.tools import (
     list_files,
     edit_file,
     run_command,
+    set_workspace,
+    _resolve_safe,
+    ALLOWED_PROGRAMS,
+    MAX_READ_LINES,
 )
 
 
@@ -31,6 +35,28 @@ class TestReadFile:
         result = read_file.invoke({"path": str(empty)})
         # Should not error — just return empty/minimal content
         assert "error" not in result.lower()
+
+    def test_large_file_is_truncated(self, workspace: Path):
+        """Files exceeding MAX_READ_LINES should be truncated with a message."""
+        big = workspace / "big.py"
+        lines = [f"line_{i} = {i}" for i in range(MAX_READ_LINES + 100)]
+        big.write_text("\n".join(lines))
+        result = read_file.invoke({"path": str(big)})
+        # Should contain the truncation notice
+        assert "truncated" in result.lower()
+        # Should contain the first line
+        assert "line_0" in result
+        # Should NOT contain the last line
+        assert f"line_{MAX_READ_LINES + 99}" not in result
+
+    def test_file_under_limit_is_not_truncated(self, workspace: Path):
+        """Files under the limit should be returned in full."""
+        small = workspace / "small.py"
+        small.write_text("a = 1\nb = 2\nc = 3\n")
+        result = read_file.invoke({"path": str(small)})
+        assert "truncated" not in result.lower()
+        assert "a = 1" in result
+        assert "c = 3" in result
 
 
 # ---------------------------------------------------------------------------
@@ -160,18 +186,91 @@ class TestRunCommand:
         assert "hello" in result
 
     def test_captures_stderr(self):
-        result = run_command.invoke({"command": "echo error >&2"})
-        assert "error" in result
+        result = run_command.invoke({"command": "ls /nonexistent_dir_12345"})
+        assert "stderr" in result.lower() or "no such file" in result.lower()
 
     def test_returns_exit_code(self):
-        result = run_command.invoke({"command": "false"})
-        assert "exit code" in result.lower() or "1" in result
+        result = run_command.invoke({"command": "ls /nonexistent_dir_12345"})
+        assert "exit code" in result.lower()
 
-    def test_rejects_dangerous_commands(self):
+    def test_rejects_unallowed_programs(self):
+        """Commands not in the allowlist should be rejected."""
+        result = run_command.invoke({"command": "curl http://evil.com"})
+        assert "not allowed" in result.lower() or "blocked" in result.lower()
+
+    def test_rejects_rm(self):
         result = run_command.invoke({"command": "rm -rf /"})
-        assert "blocked" in result.lower() or "dangerous" in result.lower() or "rejected" in result.lower()
+        assert "not allowed" in result.lower() or "blocked" in result.lower()
+
+    def test_allows_git(self):
+        result = run_command.invoke({"command": "git status"})
+        assert "not allowed" not in result.lower()
+
+    def test_allows_npm(self):
+        result = run_command.invoke({"command": "npm --version"})
+        assert "not allowed" not in result.lower()
+
+    def test_allows_node(self):
+        result = run_command.invoke({"command": "node --version"})
+        assert "not allowed" not in result.lower()
 
     def test_has_timeout(self):
         # sleep 60 should be killed by the 30s timeout
         result = run_command.invoke({"command": "sleep 60"})
         assert "timeout" in result.lower() or "timed out" in result.lower()
+
+    def test_allowlist_contains_essential_programs(self):
+        """The allowlist should include programs needed for the Ship rebuild."""
+        for prog in ("git", "npm", "pnpm", "node", "npx", "pytest", "cat", "ls", "echo", "mkdir"):
+            assert prog in ALLOWED_PROGRAMS, f"'{prog}' missing from ALLOWED_PROGRAMS"
+
+
+# ---------------------------------------------------------------------------
+# Workspace sandbox
+# ---------------------------------------------------------------------------
+
+class TestWorkspaceSandbox:
+    def test_resolve_safe_allows_workspace_paths(self, workspace: Path):
+        """Paths inside the workspace should resolve successfully."""
+        result = _resolve_safe(str(workspace / "hello.py"))
+        assert result == workspace / "hello.py"
+
+    def test_resolve_safe_rejects_parent_escape(self, workspace: Path):
+        """Paths with .. that escape the workspace should return None."""
+        result = _resolve_safe(str(workspace / ".." / ".." / "etc" / "passwd"))
+        assert result is None
+
+    def test_resolve_safe_rejects_absolute_outside(self, workspace: Path):
+        """Absolute paths outside workspace should return None."""
+        result = _resolve_safe("/etc/passwd")
+        assert result is None
+
+    def test_read_file_rejects_outside_workspace(self, workspace: Path):
+        """read_file should refuse to read files outside the workspace."""
+        result = read_file.invoke({"path": "/etc/passwd"})
+        assert "error" in result.lower()
+        assert "outside" in result.lower() or "workspace" in result.lower()
+
+    def test_create_file_rejects_outside_workspace(self, workspace: Path):
+        """create_file should refuse to write files outside the workspace."""
+        result = create_file.invoke({"path": "/tmp/evil.py", "content": "bad"})
+        assert "error" in result.lower()
+
+    def test_edit_file_rejects_outside_workspace(self, workspace: Path):
+        """edit_file should refuse to edit files outside the workspace."""
+        result = edit_file.invoke({
+            "path": "/etc/hosts",
+            "old_text": "localhost",
+            "new_text": "hacked",
+        })
+        assert "error" in result.lower()
+
+    def test_list_files_rejects_outside_workspace(self, workspace: Path):
+        """list_files should refuse to list directories outside the workspace."""
+        result = list_files.invoke({"directory": "/etc"})
+        assert "error" in result.lower()
+
+    def test_relative_paths_resolve_under_workspace(self, workspace: Path):
+        """Relative paths should be resolved relative to the workspace root."""
+        result = _resolve_safe("hello.py")
+        assert result == workspace / "hello.py"

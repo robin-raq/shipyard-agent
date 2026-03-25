@@ -21,11 +21,15 @@ from shipyard.worker import build_worker_graph
 from shipyard.worker_prompts import SUPERVISOR_PROMPT, WORKER_PROMPTS
 
 
+VALID_WORKERS = frozenset({"backend", "frontend", "database", "shared"})
+
+
 def parse_task_plan(llm_output: str) -> list[dict]:
     """Parse a JSON task plan from the LLM's output.
 
     Looks for a JSON code block first, then tries bare JSON. Falls back
-    to a single backend task if parsing fails.
+    to a single backend task if parsing fails. Unknown worker names are
+    replaced with "backend".
 
     Returns:
         List of TaskItem dicts with status="pending" and result="".
@@ -48,8 +52,11 @@ def parse_task_plan(llm_output: str) -> list[dict]:
 
     tasks = []
     for item in parsed:
+        worker = item.get("worker", "backend")
+        if worker not in VALID_WORKERS:
+            worker = "backend"
         tasks.append({
-            "worker": item.get("worker", "backend"),
+            "worker": worker,
             "description": item.get("description", ""),
             "status": "pending",
             "result": "",

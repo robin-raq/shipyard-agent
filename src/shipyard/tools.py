@@ -2,6 +2,9 @@
 
 Each tool is a standalone function decorated with @tool. Tools return str
 (not exceptions) so the LLM sees errors as data and can self-correct.
+
+All file tools enforce a workspace sandbox — paths that resolve outside
+the workspace root are rejected.
 """
 
 import os
@@ -9,6 +12,38 @@ import subprocess
 from pathlib import Path
 
 from langchain_core.tools import tool
+
+
+# ---------------------------------------------------------------------------
+# Workspace sandbox
+# ---------------------------------------------------------------------------
+
+_workspace_root: Path = Path.cwd()
+
+MAX_READ_LINES = 500
+
+
+def set_workspace(root: Path) -> None:
+    """Set the workspace root for all file tools."""
+    global _workspace_root
+    _workspace_root = root.resolve()
+
+
+def _resolve_safe(path: str) -> Path | None:
+    """Resolve a path and verify it's inside the workspace.
+
+    Relative paths are resolved against the workspace root.
+    Returns None if the resolved path escapes the workspace.
+    """
+    p = Path(path)
+    if not p.is_absolute():
+        p = _workspace_root / p
+    resolved = p.resolve()
+    try:
+        resolved.relative_to(_workspace_root)
+        return resolved
+    except ValueError:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +61,9 @@ def read_file(path: str) -> str:
         File contents with line numbers (e.g., '1: def greet(name):')
         or an error message if the file does not exist.
     """
-    p = Path(path)
+    p = _resolve_safe(path)
+    if p is None:
+        return f"Error: Path is outside the workspace: {path}"
     if not p.exists():
         return f"Error: File not found: {path}"
     if not p.is_file():
@@ -37,8 +74,20 @@ def read_file(path: str) -> str:
         return f"(empty file: {path})"
 
     lines = content.splitlines()
+    total = len(lines)
+    truncated = total > MAX_READ_LINES
+    if truncated:
+        lines = lines[:MAX_READ_LINES]
+
     numbered = [f"{i + 1}: {line}" for i, line in enumerate(lines)]
-    return "\n".join(numbered)
+    result = "\n".join(numbered)
+
+    if truncated:
+        result += (
+            f"\n\n[Truncated: showing {MAX_READ_LINES} of {total} lines. "
+            f"File is too large to read in full.]"
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +108,9 @@ def create_file(path: str, content: str) -> str:
     Returns:
         Success message or error if the file already exists.
     """
-    p = Path(path)
+    p = _resolve_safe(path)
+    if p is None:
+        return f"Error: Path is outside the workspace: {path}"
     if p.exists():
         return f"Error: File already exists: {path}. Use edit_file to modify it."
 
@@ -83,7 +134,9 @@ def list_files(directory: str, pattern: str = "") -> str:
     Returns:
         Newline-separated list of file/directory names, or error message.
     """
-    d = Path(directory)
+    d = _resolve_safe(directory)
+    if d is None:
+        return f"Error: Path is outside the workspace: {directory}"
     if not d.exists():
         return f"Error: Directory not found: {directory}"
     if not d.is_dir():
@@ -123,7 +176,9 @@ def edit_file(path: str, old_text: str, new_text: str) -> str:
     Returns:
         Success message with verification, or error with file contents.
     """
-    p = Path(path)
+    p = _resolve_safe(path)
+    if p is None:
+        return f"Error: Path is outside the workspace: {path}"
     if not p.exists():
         return f"Error: File not found: {path}"
 
@@ -190,41 +245,62 @@ def _find_match_locations(content: str, text: str) -> str:
 # run_command
 # ---------------------------------------------------------------------------
 
-DANGEROUS_PATTERNS = [
-    "rm -rf /",
-    "rm -rf /*",
-    "sudo ",
-    "mkfs",
-    "> /dev/",
-    "dd if=",
-    ":(){ ",
-]
+ALLOWED_PROGRAMS = frozenset({
+    # Version control
+    "git",
+    # Node.js ecosystem
+    "node", "npm", "npx", "pnpm", "yarn", "tsc",
+    # Python ecosystem
+    "pytest", "pip",
+    # Build tools
+    "make",
+    # Safe shell utilities
+    "cat", "head", "tail", "less", "wc", "sort", "uniq", "diff", "find", "grep",
+    "ls", "echo", "mkdir", "cp", "mv", "touch", "pwd", "which", "env", "printenv",
+    "sed", "awk", "tr", "cut", "tee", "xargs",
+    # Testing / diagnostics
+    "sleep", "true", "false", "test",
+})
+
+
+def _parse_command(command: str) -> list[str]:
+    """Split a command string into a list of arguments using shlex."""
+    import shlex
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return []
 
 
 @tool
 def run_command(command: str) -> str:
-    """Execute a shell command and return stdout, stderr, and exit code.
+    """Execute a command and return stdout, stderr, and exit code.
 
-    Dangerous commands (rm -rf /, sudo, etc.) are blocked.
-    Commands time out after 30 seconds.
+    Only allowlisted programs can be run (git, npm, node, pytest, etc.).
+    Commands time out after 30 seconds. Shell operators (|, ;, &&) are
+    not supported — each command runs as a direct process.
 
     Args:
-        command: The shell command to execute.
+        command: The command to execute (e.g., 'git status', 'npm test').
 
     Returns:
         Combined stdout, stderr, and exit code, or error if blocked/timed out.
     """
-    for pattern in DANGEROUS_PATTERNS:
-        if pattern in command:
-            return f"Blocked: Dangerous command rejected. '{command}' matches blocked pattern '{pattern}'."
+    args = _parse_command(command)
+    if not args:
+        return f"Error: Could not parse command: {command}"
+
+    program = Path(args[0]).name
+    if program not in ALLOWED_PROGRAMS:
+        return f"Blocked: '{program}' is not allowed. Allowed programs: {', '.join(sorted(ALLOWED_PROGRAMS))}"
 
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
             capture_output=True,
             text=True,
             timeout=30,
+            cwd=str(_workspace_root),
         )
         parts = []
         if result.stdout:

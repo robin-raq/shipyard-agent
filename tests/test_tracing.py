@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from shipyard.tracing import TraceCollector
+from shipyard.tracing import TraceCollector, redact_sensitive
 
 
 class TestTraceCollector:
@@ -80,3 +80,48 @@ class TestTraceCollector:
         assert len(parts) == 2
         assert len(parts[0]) == 8  # YYYYMMDD
         assert len(parts[1]) == 6  # HHMMSS
+
+
+class TestRedaction:
+    def test_redacts_anthropic_api_key(self):
+        """Anthropic API keys should be redacted."""
+        text = "ANTHROPIC_API_KEY=sk-ant-api03-abc123xyz"
+        result = redact_sensitive(text)
+        assert "sk-ant-api03" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_openai_api_key(self):
+        """OpenAI API keys should be redacted."""
+        text = "key=sk-proj-1tr8iceexbxTh0Yq"
+        result = redact_sensitive(text)
+        assert "sk-proj-" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_langsmith_key(self):
+        """LangSmith API keys should be redacted."""
+        text = "LANGSMITH_API_KEY=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"
+        result = redact_sensitive(text)
+        assert "lsv2_pt_" not in result
+        assert "[REDACTED]" in result
+
+    def test_preserves_normal_text(self):
+        """Non-sensitive text should be unchanged."""
+        text = "def greet(name):\n    return f'Hello, {name}!'"
+        assert redact_sensitive(text) == text
+
+    def test_trace_output_is_redacted(self, tmp_path: Path):
+        """Tool outputs saved to trace files should have secrets redacted."""
+        tc = TraceCollector()
+        tc.start_trace("read secrets")
+        tc.add_step(
+            action="read_file",
+            input_data={"path": ".env"},
+            output="ANTHROPIC_API_KEY=sk-ant-api03-secretkey123",
+            duration_ms=10,
+        )
+        tc.save_trace(str(tmp_path))
+
+        trace_file = next(tmp_path.glob("trace_*.json"))
+        data = json.loads(trace_file.read_text())
+        assert "sk-ant-api03" not in data["steps"][0]["output"]
+        assert "[REDACTED]" in data["steps"][0]["output"]

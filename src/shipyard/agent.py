@@ -14,29 +14,6 @@ from shipyard.prompts import build_system_prompt
 from shipyard.state import AgentState
 from shipyard.tools import ALL_TOOLS
 
-# Module-level reference used by agent_node at runtime
-model_with_tools = None
-
-
-def agent_node(state: AgentState) -> dict:
-    """Call the LLM with the current conversation and system prompt.
-
-    Prepends the system prompt (with optional injected context)
-    to the message history before calling Claude.
-    """
-    system_prompt = build_system_prompt(state.get("context", ""))
-    messages = [SystemMessage(content=system_prompt)] + list(state["messages"])
-    response = model_with_tools.invoke(messages)
-    return {"messages": [response]}
-
-
-def should_continue(state: AgentState) -> str:
-    """Route to tools if the last message has tool calls, otherwise end."""
-    last_message = state["messages"][-1]
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-    return END
-
 
 def build_graph(llm=None):
     """Build and compile the Shipyard agent graph.
@@ -52,12 +29,25 @@ def build_graph(llm=None):
     Returns:
         A compiled LangGraph StateGraph ready for .invoke().
     """
-    global model_with_tools
     if llm is not None:
-        model_with_tools = llm
+        bound_llm = llm
     else:
         model = ChatAnthropic(model="claude-sonnet-4-5-20250929", temperature=0)
-        model_with_tools = model.bind_tools(ALL_TOOLS)
+        bound_llm = model.bind_tools(ALL_TOOLS)
+
+    def agent_node(state: AgentState) -> dict:
+        """Call the LLM with the current conversation and system prompt."""
+        system_prompt = build_system_prompt(state.get("context", ""))
+        messages = [SystemMessage(content=system_prompt)] + list(state["messages"])
+        response = bound_llm.invoke(messages)
+        return {"messages": [response]}
+
+    def should_continue(state: AgentState) -> str:
+        """Route to tools if the last message has tool calls, otherwise end."""
+        last_message = state["messages"][-1]
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            return "tools"
+        return END
 
     tool_node = ToolNode(ALL_TOOLS)
 

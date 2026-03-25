@@ -6,9 +6,27 @@ LangSmith's auto-tracing with a local, version-controllable record.
 """
 
 import json
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+# Patterns that match common API key formats
+_SECRET_PATTERNS = [
+    re.compile(r"sk-ant-api\S+"),           # Anthropic
+    re.compile(r"sk-proj-\S+"),             # OpenAI project keys
+    re.compile(r"sk-[a-zA-Z0-9]{20,}"),     # Generic OpenAI keys
+    re.compile(r"lsv2_pt_\S+"),             # LangSmith
+    re.compile(r"Bearer\s+\S+"),            # Authorization headers
+]
+
+
+def redact_sensitive(text: str) -> str:
+    """Replace API keys and secrets with [REDACTED]."""
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub("[REDACTED]", text)
+    return text
 
 
 class TraceCollector:
@@ -54,7 +72,7 @@ class TraceCollector:
             "step": len(self._trace["steps"]) + 1,
             "action": action,
             "input": input_data,
-            "output": output,
+            "output": redact_sensitive(output),
             "duration_ms": duration_ms,
         }
         self._trace["steps"].append(step)

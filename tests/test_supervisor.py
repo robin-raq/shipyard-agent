@@ -69,6 +69,28 @@ class TestParseTaskPlan:
         assert len(tasks) == 1
         assert tasks[0]["worker"] == "frontend"
 
+    def test_unknown_worker_defaults_to_backend(self):
+        """Unknown worker names should be replaced with 'backend'."""
+        llm_output = '[{"worker": "hacker_agent", "description": "Do something"}]'
+        tasks = parse_task_plan(llm_output)
+        assert tasks[0]["worker"] == "backend"
+
+    def test_only_known_workers_in_output(self):
+        """All tasks should have workers from the known set."""
+        llm_output = (
+            '```json\n'
+            '[\n'
+            '  {"worker": "shared", "description": "types"},\n'
+            '  {"worker": "evil", "description": "hack"},\n'
+            '  {"worker": "database", "description": "migrate"}\n'
+            ']\n'
+            '```'
+        )
+        tasks = parse_task_plan(llm_output)
+        valid_workers = {"backend", "frontend", "database", "shared"}
+        for task in tasks:
+            assert task["worker"] in valid_workers
+
 
 # ---------------------------------------------------------------------------
 # check_if_done (routing function)
