@@ -1,5 +1,11 @@
 import "dotenv/config";
+import { createApp } from "./app.js";
+import pool from "./db/pool.js";
 
 const PORT = process.env.PORT || 3000;
 
-console.log(`Ship API server placeholder — port ${PORT}`);
+const app = createApp(pool);
+
+app.listen(PORT, () => {
+  console.log(`Ship API server listening on port ${PORT}`);
+});

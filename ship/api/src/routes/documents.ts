@@ -1,0 +1,177 @@
+import { Router, Request, Response, NextFunction } from "express";
+import pg from "pg";
+
+const VALID_DOCUMENT_TYPES = ["doc", "issue", "project", "week", "team"];
+
+export function createDocumentsRouter(pool: pg.Pool): Router {
+  const router = Router();
+
+  // GET / - list documents with optional type filter
+  router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { type } = req.query;
+
+      let query = "SELECT * FROM documents WHERE deleted_at IS NULL";
+      const params: string[] = [];
+
+      if (type) {
+        if (!VALID_DOCUMENT_TYPES.includes(type as string)) {
+          return res.status(400).json({
+            error: true,
+            message: "Invalid document type",
+            status: 400,
+          });
+        }
+        query += " AND document_type = $1";
+        params.push(type as string);
+      }
+
+      query += " ORDER BY created_at DESC";
+
+      const result = await pool.query(query, params);
+      res.status(200).json(result.rows);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /:id - get single document by id
+  router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+
+      const result = await pool.query(
+        "SELECT * FROM documents WHERE id = $1 AND deleted_at IS NULL",
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          error: true,
+          message: "Document not found",
+          status: 404,
+        });
+      }
+
+      res.status(200).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST / - create new document
+  router.post("/", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { title, content, document_type } = req.body;
+
+      if (!title) {
+        return res.status(400).json({
+          error: true,
+          message: "Title is required",
+          status: 400,
+        });
+      }
+
+      if (!document_type || !VALID_DOCUMENT_TYPES.includes(document_type)) {
+        return res.status(400).json({
+          error: true,
+          message: "Invalid document type",
+          status: 400,
+        });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO documents (title, content, document_type)
+         VALUES ($1, $2, $3)
+         RETURNING *`,
+        [title, content || "", document_type]
+      );
+
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // PUT /:id - update document
+  router.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { title, content } = req.body;
+
+      const updates: string[] = [];
+      const params: any[] = [];
+      let paramCount = 1;
+
+      if (title !== undefined) {
+        updates.push(`title = $${paramCount++}`);
+        params.push(title);
+      }
+
+      if (content !== undefined) {
+        updates.push(`content = $${paramCount++}`);
+        params.push(content);
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({
+          error: true,
+          message: "No fields to update",
+          status: 400,
+        });
+      }
+
+      updates.push(`updated_at = NOW()`);
+      params.push(id);
+
+      const result = await pool.query(
+        `UPDATE documents
+         SET ${updates.join(", ")}
+         WHERE id = $${paramCount} AND deleted_at IS NULL
+         RETURNING *`,
+        params
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          error: true,
+          message: "Document not found",
+          status: 404,
+        });
+      }
+
+      res.status(200).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // DELETE /:id - soft delete document
+  router.delete("/:id", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+
+      const result = await pool.query(
+        `UPDATE documents
+         SET deleted_at = NOW()
+         WHERE id = $1 AND deleted_at IS NULL
+         RETURNING *`,
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          error: true,
+          message: "Document not found",
+          status: 404,
+        });
+      }
+
+      res.status(200).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  return router;
+}
