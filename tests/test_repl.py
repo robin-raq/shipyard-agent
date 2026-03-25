@@ -141,6 +141,49 @@ class TestREPL:
         assert "line two" in call_args["context"]
 
 
+class TestRevertCommand:
+    def test_revert_restores_backup(self, tmp_path: Path):
+        """handle_revert should restore the .bak file."""
+        target = tmp_path / "app.py"
+        target.write_text("modified content")
+        backup = tmp_path / "app.py.bak"
+        backup.write_text("original content")
+
+        from shipyard.__main__ import handle_revert
+        result = handle_revert(str(target))
+
+        assert "reverted" in result.lower()
+        assert target.read_text() == "original content"
+        assert not backup.exists()  # backup is cleaned up after revert
+
+    def test_revert_missing_backup(self, tmp_path: Path):
+        """Reverting a file with no .bak should return an error."""
+        target = tmp_path / "no_backup.py"
+        target.write_text("content")
+
+        from shipyard.__main__ import handle_revert
+        result = handle_revert(str(target))
+        assert "error" in result.lower() or "no backup" in result.lower()
+
+    @patch("shipyard.__main__.build_graph")
+    @patch("builtins.input")
+    def test_revert_command_in_repl(self, mock_input, mock_build, tmp_path: Path):
+        """'/revert <path>' in the REPL should call handle_revert."""
+        target = tmp_path / "app.py"
+        target.write_text("modified")
+        backup = tmp_path / "app.py.bak"
+        backup.write_text("original")
+
+        mock_graph = MagicMock()
+        mock_build.return_value = mock_graph
+        mock_input.side_effect = [f"/revert {target}", "/quit"]
+
+        from shipyard.__main__ import main
+        main()
+
+        assert target.read_text() == "original"
+
+
 class TestMultiAgentMode:
     @patch("shipyard.__main__.build_supervisor_graph")
     @patch("shipyard.__main__.build_graph")

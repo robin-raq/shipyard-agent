@@ -175,6 +175,25 @@ class TestEditFile:
         })
         assert "error" in result.lower() or "not found" in result.lower()
 
+    def test_shows_before_after(self, sample_file: Path):
+        """edit_file should show what changed (before/after snippet)."""
+        result = edit_file.invoke({
+            "path": str(sample_file),
+            "old_text": 'return f"Hello, {name}!"',
+            "new_text": 'return f"Hi, {name}!"',
+        })
+        assert "before:" in result.lower() or "old:" in result.lower() or "---" in result
+        assert "after:" in result.lower() or "new:" in result.lower() or "+++" in result
+
+    def test_shows_backup_path(self, sample_file: Path):
+        """edit_file should mention the .bak backup in its output."""
+        result = edit_file.invoke({
+            "path": str(sample_file),
+            "old_text": 'return f"Hello, {name}!"',
+            "new_text": 'return f"Hi, {name}!"',
+        })
+        assert ".bak" in result
+
 
 # ---------------------------------------------------------------------------
 # run_command

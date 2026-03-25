@@ -211,7 +211,22 @@ def edit_file(path: str, old_text: str, new_text: str) -> str:
     # Verify the edit landed
     verified = p.read_text()
     if new_text in verified:
-        return f"Successfully replaced text in {path}. Edit verified."
+        # Build a before/after summary
+        old_lines = old_text.splitlines()
+        new_lines = new_text.splitlines()
+        old_preview = "\n".join(f"  --- {l}" for l in old_lines[:5])
+        new_preview = "\n".join(f"  +++ {l}" for l in new_lines[:5])
+        if len(old_lines) > 5:
+            old_preview += f"\n  --- ... ({len(old_lines) - 5} more lines)"
+        if len(new_lines) > 5:
+            new_preview += f"\n  +++ ... ({len(new_lines) - 5} more lines)"
+
+        return (
+            f"Successfully replaced text in {path}. Edit verified.\n\n"
+            f"Before:\n{old_preview}\n\n"
+            f"After:\n{new_preview}\n\n"
+            f"Backup saved: {backup}"
+        )
     else:
         return f"Warning: Edit applied to {path} but verification failed. Check the file."
 

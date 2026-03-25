@@ -13,6 +13,18 @@ from shipyard.supervisor import build_supervisor_graph
 from shipyard.tracing import TraceCollector
 
 
+def handle_revert(filepath: str) -> str:
+    """Restore a file from its .bak backup."""
+    p = Path(filepath)
+    backup = Path(str(p) + ".bak")
+    if not backup.exists():
+        return f"Error: No backup found for {filepath} (expected {backup})"
+    backup_content = backup.read_text()
+    p.write_text(backup_content)
+    backup.unlink()
+    return f"Reverted {filepath} from backup."
+
+
 def handle_context_file(filepath: str) -> str:
     """Read a file and return its content as context."""
     p = Path(filepath)
@@ -52,7 +64,7 @@ def main():
     context = ""
 
     print("Shipyard agent v0.1.0")
-    print("Commands: /quit, /multi, /single, /context <filepath>, /context paste")
+    print("Commands: /quit, /multi, /single, /revert <filepath>, /context <filepath>, /context paste")
     print()
 
     while True:
@@ -84,6 +96,13 @@ def main():
             mode = "single"
             messages = []
             print("Switched to single-agent mode.")
+            continue
+
+        # Revert command
+        if stripped.startswith("/revert "):
+            filepath = stripped[len("/revert "):].strip()
+            result = handle_revert(filepath)
+            print(result)
             continue
 
         # Context injection commands
