@@ -95,7 +95,7 @@ async function seed() {
     // Insert sample projects
     for (const project of sampleProjects) {
       await pool.query(
-        `INSERT INTO projects (title, content)
+        `INSERT INTO projects (title, description)
          VALUES ($1, $2)`,
         [project.title, project.content]
       );
@@ -115,7 +115,7 @@ async function seed() {
     // Insert sample teams
     for (const team of sampleTeams) {
       await pool.query(
-        `INSERT INTO teams (title, content)
+        `INSERT INTO teams (name, description)
          VALUES ($1, $2)`,
         [team.title, team.content]
       );
