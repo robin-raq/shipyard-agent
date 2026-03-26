@@ -185,7 +185,7 @@ export async function getTeam(id: string) {
   return handleResponse(response);
 }
 
-export async function createTeam(data: { name: string; content: string }) {
+export async function createTeam(data: { name: string; description: string }) {
   const response = await fetch('/api/teams', {
     method: 'POST',
     headers: {
@@ -196,7 +196,7 @@ export async function createTeam(data: { name: string; content: string }) {
   return handleResponse(response);
 }
 
-export async function updateTeam(id: string, data: { name?: string; content?: string }) {
+export async function updateTeam(id: string, data: { name?: string; description?: string }) {
   const response = await fetch(`/api/teams/${id}`, {
     method: 'PUT',
     headers: {
@@ -209,6 +209,68 @@ export async function updateTeam(id: string, data: { name?: string; content?: st
 
 export async function deleteTeam(id: string) {
   const response = await fetch(`/api/teams/${id}`, {
+    method: 'DELETE',
+  });
+  return handleResponse(response);
+}
+
+// Ships API
+export async function getShips(filters?: { status?: string; team_id?: string }) {
+  let url = '/api/ships';
+  if (filters) {
+    const params = new URLSearchParams();
+    if (filters.status) params.append('status', filters.status);
+    if (filters.team_id) params.append('team_id', filters.team_id);
+    const queryString = params.toString();
+    if (queryString) url += `?${queryString}`;
+  }
+  const response = await fetch(url);
+  return handleResponse(response);
+}
+
+export async function getShip(id: string) {
+  const response = await fetch(`/api/ships/${id}`);
+  return handleResponse(response);
+}
+
+export async function createShip(data: { 
+  name: string; 
+  type: string; 
+  status?: string; 
+  team_id?: string;
+  capacity?: number;
+  current_location?: string;
+}) {
+  const response = await fetch('/api/ships', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function updateShip(id: string, data: { 
+  name?: string; 
+  type?: string; 
+  status?: string; 
+  team_id?: string;
+  capacity?: number;
+  current_location?: string;
+}) {
+  const response = await fetch(`/api/ships/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function deleteShip(id: string) {
+  const response = await fetch(`/api/ships/${id}`, {
     method: 'DELETE',
   });
   return handleResponse(response);

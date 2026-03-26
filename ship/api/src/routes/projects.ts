@@ -42,7 +42,7 @@ export function createProjectsRouter(pool: pg.Pool): Router {
   // POST / - create new project
   router.post("/", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { title, content } = req.body;
+      const { title, description } = req.body;
 
       if (!title) {
         return res.status(400).json({
@@ -53,10 +53,10 @@ export function createProjectsRouter(pool: pg.Pool): Router {
       }
 
       const result = await pool.query(
-        `INSERT INTO projects (title, content)
+        `INSERT INTO projects (title, description)
          VALUES ($1, $2)
          RETURNING *`,
-        [title, content || ""]
+        [title, description || ""]
       );
 
       res.status(201).json(result.rows[0]);
@@ -69,7 +69,7 @@ export function createProjectsRouter(pool: pg.Pool): Router {
   router.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { title, content } = req.body;
+      const { title, description } = req.body;
 
       const updates: string[] = [];
       const params: any[] = [];
@@ -80,9 +80,9 @@ export function createProjectsRouter(pool: pg.Pool): Router {
         params.push(title);
       }
 
-      if (content !== undefined) {
-        updates.push(`content = $${paramCount++}`);
-        params.push(content);
+      if (description !== undefined) {
+        updates.push(`description = $${paramCount++}`);
+        params.push(description);
       }
 
       if (updates.length === 0) {

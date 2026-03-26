@@ -3,7 +3,7 @@ import pool from "./pool.js";
 
 const sampleDocs = [
   {
-    title: "Getting Started Guide",
+    name: "Getting Started Guide",
     content: "This guide will help you get started with the Ship platform. Follow these steps to set up your workspace and create your first document.",
   },
   {
@@ -20,8 +20,8 @@ const sampleIssues = [
     priority: "high",
   },
   {
-    title: "Improve performance on dashboard",
-    content: "Dashboard is loading slowly when there are many documents. Consider implementing pagination or lazy loading.",
+    name: "Improve performance on dashboard",
+    description: "Dashboard is loading slowly when there are many documents. Consider implementing pagination or lazy loading.",
     status: "in_progress",
     priority: "medium",
   },
@@ -30,7 +30,7 @@ const sampleIssues = [
 const sampleProjects = [
   {
     title: "Q1 Product Roadmap",
-    content: "Key initiatives for Q1 include: new document editor, improved search, and mobile app launch.",
+    description: "Key initiatives for Q1 include: new document editor, improved search, and mobile app launch.",
   },
   {
     title: "Marketing Website Redesign",
@@ -41,11 +41,11 @@ const sampleProjects = [
 const sampleWeeks = [
   {
     title: "Week of Jan 15, 2024",
-    content: "This week we shipped the new editor, fixed 12 bugs, and onboarded 3 new customers. Next week focus on performance improvements.",
+    description: "This week we shipped the new editor, fixed 12 bugs, and onboarded 3 new customers. Next week focus on performance improvements.",
   },
   {
     title: "Week of Jan 22, 2024",
-    content: "Performance improvements deployed. Dashboard load time reduced by 40%. Started work on mobile app prototype.",
+    description: "Performance improvements deployed. Dashboard load time reduced by 40%. Started work on mobile app prototype.",
   },
 ];
 
@@ -55,8 +55,8 @@ const sampleTeams = [
     content: "The engineering team consists of 8 developers working on backend, frontend, and mobile. We use agile methodology with 2-week sprints.",
   },
   {
-    title: "Product Team",
-    content: "Product team includes 3 product managers and 2 designers. Responsible for roadmap planning, user research, and design.",
+    name: "Product Team",
+    description: "Product team includes 3 product managers and 2 designers. Responsible for roadmap planning, user research, and design.",
   },
 ];
 
@@ -144,3 +144,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 export { seed };
+d };

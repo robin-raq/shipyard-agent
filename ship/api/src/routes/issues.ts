@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import pg from "pg";
 
-const VALID_STATUSES = ["open", "in_progress", "closed"];
+const VALID_STATUSES = ["open", "in_progress", "closed", "done"];
 const VALID_PRIORITIES = ["low", "medium", "high", "urgent"];
 
 export function createIssuesRouter(pool: pg.Pool): Router {

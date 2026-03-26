@@ -42,21 +42,21 @@ export function createTeamsRouter(pool: pg.Pool): Router {
   // POST / - create new team
   router.post("/", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { title, content } = req.body;
+      const { name, description } = req.body;
 
-      if (!title) {
+      if (!name) {
         return res.status(400).json({
           error: true,
-          message: "Title is required",
+          message: "Name is required",
           status: 400,
         });
       }
 
       const result = await pool.query(
-        `INSERT INTO teams (title, content)
+        `INSERT INTO teams (name, description)
          VALUES ($1, $2)
          RETURNING *`,
-        [title, content || ""]
+        [name, description || ""]
       );
 
       res.status(201).json(result.rows[0]);
@@ -69,20 +69,20 @@ export function createTeamsRouter(pool: pg.Pool): Router {
   router.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { title, content } = req.body;
+      const { name, description } = req.body;
 
       const updates: string[] = [];
       const params: any[] = [];
       let paramCount = 1;
 
-      if (title !== undefined) {
-        updates.push(`title = $${paramCount++}`);
-        params.push(title);
+      if (name !== undefined) {
+        updates.push(`name = $${paramCount++}`);
+        params.push(name);
       }
 
-      if (content !== undefined) {
-        updates.push(`content = $${paramCount++}`);
-        params.push(content);
+      if (description !== undefined) {
+        updates.push(`description = $${paramCount++}`);
+        params.push(description);
       }
 
       if (updates.length === 0) {
