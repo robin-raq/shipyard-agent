@@ -7,14 +7,25 @@ import { startSessionCleanup } from "./utils/sessionCleanup.js";
 
 const PORT = process.env.PORT || 3000;
 
-const app = createApp(pool);
-const server = http.createServer(app);
+async function start() {
+  // Run migrations on startup in production
+  try {
+    const { runMigrations } = await import("./db/migrate.js");
+    await runMigrations(pool);
+    console.log("Migrations complete");
+  } catch (err) {
+    console.error("Migration error (non-fatal):", err);
+  }
 
-server.listen(PORT, () => {
-  console.log(`Ship API server listening on port ${PORT}`);
-});
+  const app = createApp(pool);
+  const server = http.createServer(app);
 
-setupWebSocket(server);
+  server.listen(PORT, () => {
+    console.log(`Ship API server listening on port ${PORT}`);
+  });
 
-// Start periodic session cleanup (every 60 minutes)
-startSessionCleanup(pool, 60);
+  setupWebSocket(server);
+  startSessionCleanup(pool, 60);
+}
+
+start();
