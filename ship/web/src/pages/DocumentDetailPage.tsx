@@ -8,6 +8,7 @@ import {
   getTeam, updateTeam, deleteTeam
 } from '../api/client';
 import DocumentForm from '../components/DocumentForm';
+import RichTextEditor from '../components/RichTextEditor';
 
 interface Entity {
   id: string;
@@ -109,19 +110,19 @@ export default function DocumentDetailPage() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="text-gray-600">Loading...</div>
-      </div>
+      <main className="p-8">
+        <div className="text-gray-700" role="status" aria-live="polite">Loading...</div>
+      </main>
     );
   }
 
   if (error || !entity || !api) {
     return (
-      <div className="p-8">
-        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+      <main className="p-8">
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg" role="alert">
           {error || 'Entity not found'}
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -129,28 +130,30 @@ export default function DocumentDetailPage() {
   const titleField = api.titleField;
 
   return (
-    <div className="p-8 max-w-4xl">
-      <div className="mb-6">
+    <main className="p-8 max-w-4xl">
+      <nav className="mb-6">
         <button
           onClick={() => navigate(`/${type}`)}
-          className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2"
+          className="text-blue-700 hover:text-blue-900 mb-4 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded px-2 py-1"
+          aria-label={`Back to ${type}`}
         >
           ← Back to {type}
         </button>
-      </div>
+      </nav>
 
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-8">
+      <article className="bg-white border border-gray-200 rounded-lg shadow-sm p-8">
         {isEditing ? (
-          <div>
-            <div className="flex items-center justify-between mb-6">
+          <section>
+            <header className="flex items-center justify-between mb-6">
               <h1 className="text-3xl font-bold text-gray-900">Edit {type?.slice(0, -1)}</h1>
               <button
                 onClick={() => setIsEditing(false)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                aria-label="Cancel editing"
               >
                 Cancel
               </button>
-            </div>
+            </header>
             {titleField === 'name' ? (
               <TeamEditForm
                 onSubmit={handleUpdate}
@@ -162,13 +165,13 @@ export default function DocumentDetailPage() {
                 initialValues={{ title: entity.title || '', content: entity.content }}
               />
             )}
-          </div>
+          </section>
         ) : (
-          <div>
-            <div className="flex items-start justify-between mb-6">
+          <section>
+            <header className="flex items-start justify-between mb-6">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">{displayTitle}</h1>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-gray-700">
                   Created: {new Date(entity.created_at).toLocaleString()}
                   {entity.updated_at && entity.updated_at !== entity.created_at && (
                     <> • Updated: {new Date(entity.updated_at).toLocaleString()}</>
@@ -176,13 +179,13 @@ export default function DocumentDetailPage() {
                 </div>
                 {entity.status && (
                   <div className="mt-2">
-                    <span className="text-sm text-gray-600">Status: </span>
+                    <span className="text-sm text-gray-700">Status: </span>
                     <span className="text-sm font-medium text-gray-900">{entity.status}</span>
                   </div>
                 )}
                 {entity.priority && (
                   <div className="mt-1">
-                    <span className="text-sm text-gray-600">Priority: </span>
+                    <span className="text-sm text-gray-700">Priority: </span>
                     <span className="text-sm font-medium text-gray-900">{entity.priority}</span>
                   </div>
                 )}
@@ -190,28 +193,30 @@ export default function DocumentDetailPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  aria-label={`Edit ${displayTitle}`}
                 >
                   Edit
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  aria-label={`Delete ${displayTitle}`}
                 >
                   Delete
                 </button>
               </div>
-            </div>
+            </header>
 
             <div className="prose max-w-none">
               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <pre className="whitespace-pre-wrap font-sans text-gray-800">{entity.content}</pre>
               </div>
             </div>
-          </div>
+          </section>
         )}
-      </div>
-    </div>
+      </article>
+    </main>
   );
 }
 
@@ -235,7 +240,7 @@ function TeamEditForm({ onSubmit, initialValues }: {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4" role="form" aria-label="Edit team form">
       <div>
         <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
           Team Name
@@ -247,6 +252,7 @@ function TeamEditForm({ onSubmit, initialValues }: {
           onChange={(e) => setName(e.target.value)}
           required
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          aria-label="Team Name"
         />
       </div>
 
@@ -254,13 +260,10 @@ function TeamEditForm({ onSubmit, initialValues }: {
         <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-1">
           Description
         </label>
-        <textarea
-          id="content"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          required
-          rows={6}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+        <RichTextEditor
+          content={content}
+          onChange={setContent}
+          editable={true}
         />
       </div>
 
@@ -268,7 +271,8 @@ function TeamEditForm({ onSubmit, initialValues }: {
         <button
           type="submit"
           disabled={submitting}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          aria-label="Save team changes"
         >
           {submitting ? 'Saving...' : 'Save'}
         </button>
@@ -276,3 +280,4 @@ function TeamEditForm({ onSubmit, initialValues }: {
     </form>
   );
 }
+

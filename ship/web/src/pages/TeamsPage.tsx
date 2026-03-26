@@ -33,7 +33,7 @@ function TeamForm({ onSubmit, initialValues }: TeamFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4" role="form" aria-label="Team form">
       <div>
         <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
           Team Name
@@ -46,6 +46,7 @@ function TeamForm({ onSubmit, initialValues }: TeamFormProps) {
           required
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           placeholder="Enter team name..."
+          aria-label="Team Name"
         />
       </div>
 
@@ -61,6 +62,7 @@ function TeamForm({ onSubmit, initialValues }: TeamFormProps) {
           rows={6}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
           placeholder="Enter team description..."
+          aria-label="Description"
         />
       </div>
 
@@ -68,7 +70,8 @@ function TeamForm({ onSubmit, initialValues }: TeamFormProps) {
         <button
           type="submit"
           disabled={submitting}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          aria-label="Save team"
         >
           {submitting ? 'Saving...' : 'Save'}
         </button>
@@ -129,53 +132,54 @@ export default function TeamsPage() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="text-gray-600">Loading...</div>
-      </div>
+      <main className="p-8">
+        <div className="text-gray-700" role="status" aria-live="polite">Loading...</div>
+      </main>
     );
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
+    <main className="p-8">
+      <header className="mb-6 flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Teams</h1>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          aria-label={showCreateForm ? 'Cancel creating team' : 'Create new team'}
         >
           {showCreateForm ? 'Cancel' : '+ Create'}
         </button>
-      </div>
+      </header>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg" role="alert">
           {error}
         </div>
       )}
 
       {showCreateForm && (
-        <div className="mb-6 p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
+        <section className="mb-6 p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
           <h2 className="text-xl font-semibold mb-4">Create New Team</h2>
           <TeamForm onSubmit={handleCreate} />
-        </div>
+        </section>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+      <section className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         {teams.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-gray-700">
             No teams found. Create one to get started!
           </div>
         ) : (
-          <table className="w-full">
+          <table className="w-full" role="table" aria-label="Teams list">
             <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <tr role="row">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Team Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Created
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -186,17 +190,19 @@ export default function TeamsPage() {
                   key={team.id}
                   onClick={() => handleRowClick(team.id)}
                   className="hover:bg-gray-50 cursor-pointer transition-colors"
+                  role="row"
                 >
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
                     {team.name}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
+                  <td className="px-6 py-4 text-sm text-gray-700">
                     {new Date(team.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 text-right text-sm">
                     <button
                       onClick={(e) => handleDelete(team.id, e)}
-                      className="text-red-600 hover:text-red-800 font-medium"
+                      className="text-red-700 hover:text-red-900 font-medium focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded px-2 py-1"
+                      aria-label={`Delete team ${team.name}`}
                     >
                       Delete
                     </button>
@@ -206,7 +212,7 @@ export default function TeamsPage() {
             </tbody>
           </table>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

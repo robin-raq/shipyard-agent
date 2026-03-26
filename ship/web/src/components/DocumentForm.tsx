@@ -24,7 +24,7 @@ export default function DocumentForm({ onSubmit, initialValues }: DocumentFormPr
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4" role="form" aria-label="Document form">
       <div>
         <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
           Title
@@ -35,8 +35,10 @@ export default function DocumentForm({ onSubmit, initialValues }: DocumentFormPr
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           required
+          aria-required="true"
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           placeholder="Enter title..."
+          aria-label="Title"
         />
       </div>
 
@@ -49,9 +51,11 @@ export default function DocumentForm({ onSubmit, initialValues }: DocumentFormPr
           value={content}
           onChange={(e) => setContent(e.target.value)}
           required
+          aria-required="true"
           rows={6}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
           placeholder="Enter content..."
+          aria-label="Content"
         />
       </div>
 
@@ -59,7 +63,8 @@ export default function DocumentForm({ onSubmit, initialValues }: DocumentFormPr
         <button
           type="submit"
           disabled={submitting}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          aria-label="Save document"
         >
           {submitting ? 'Saving...' : 'Save'}
         </button>
