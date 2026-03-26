@@ -57,11 +57,11 @@ async function seedIssue(overrides: Record<string, any> = {}) {
     status: "open",
     priority: "medium",
   };
-  const issue = { ...defaults, ...overrides };
+  const issue: Record<string, any> = { ...defaults, ...overrides };
   const result = await pool.query(
-    `INSERT INTO issues (title, content, status, priority, project_id)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [issue.title, issue.content, issue.status, issue.priority, issue.project_id || null]
+    `INSERT INTO issues (title, content, status, priority)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [issue.title, issue.content, issue.status, issue.priority]
   );
   return result.rows[0];
 }

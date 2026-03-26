@@ -25,6 +25,15 @@ traces/*.json
 
 # Backups from edit_file tool
 *.bak
+*.bak2
+*.bak3
+*.skip
+
+# Firebase
+firebase-debug.log
+
+# Node (root level — ship/ has its own)
+node_modules/
 
 # OS
 .DS_Store

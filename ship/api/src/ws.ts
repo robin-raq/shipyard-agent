@@ -17,6 +17,7 @@ interface Message {
   content?: any;
   delta?: any;
   cursor?: any;
+  users?: Array<{ userId?: string; username?: string }>;
   timestamp?: number;
 }
 
