@@ -60,6 +60,29 @@ const sampleTeams = [
   },
 ];
 
+const sampleShips = [
+  {
+    name: "USS Enterprise",
+    description: "A legendary starship known for its exploration missions and diplomatic endeavors across the galaxy.",
+    status: "active",
+  },
+  {
+    name: "Millennium Falcon",
+    description: "Fast freighter ship famous for completing the Kessel Run in less than twelve parsecs.",
+    status: "active",
+  },
+  {
+    name: "Serenity",
+    description: "Firefly-class transport ship. Small crew, big adventures across the outer rim.",
+    status: "active",
+  },
+  {
+    name: "Normandy SR-2",
+    description: "Advanced stealth frigate equipped with state-of-the-art technology and a diverse crew.",
+    status: "inactive",
+  },
+];
+
 async function seed() {
   try {
     console.log("Starting database seed...");
@@ -70,6 +93,7 @@ async function seed() {
     await pool.query("DELETE FROM projects");
     await pool.query("DELETE FROM weeks");
     await pool.query("DELETE FROM teams");
+    await pool.query("DELETE FROM ships");
     console.log("Cleared existing data");
 
     // Insert sample docs
@@ -122,12 +146,23 @@ async function seed() {
       console.log(`✓ Inserted team: ${team.title}`);
     }
 
+    // Insert sample ships
+    for (const ship of sampleShips) {
+      await pool.query(
+        `INSERT INTO ships (name, description, status)
+         VALUES ($1, $2, $3)`,
+        [ship.name, ship.description, ship.status]
+      );
+      console.log(`✓ Inserted ship: ${ship.name}`);
+    }
+
     console.log(`\nSuccessfully seeded database:`);
     console.log(`- ${sampleDocs.length} docs`);
     console.log(`- ${sampleIssues.length} issues`);
     console.log(`- ${sampleProjects.length} projects`);
     console.log(`- ${sampleWeeks.length} weeks`);
     console.log(`- ${sampleTeams.length} teams`);
+    console.log(`- ${sampleShips.length} ships`);
 
     await pool.end();
     process.exit(0);
@@ -144,4 +179,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 export { seed };
-d };

@@ -5,6 +5,7 @@ import IssuesPage from './pages/IssuesPage';
 import ProjectsPage from './pages/ProjectsPage';
 import WeeksPage from './pages/WeeksPage';
 import TeamsPage from './pages/TeamsPage';
+import ShipsPage from './pages/ShipsPage';
 import DocumentDetailPage from './pages/DocumentDetailPage';
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="weeks" element={<WeeksPage />} />
           <Route path="teams" element={<TeamsPage />} />
+          <Route path="ships" element={<ShipsPage />} />
           <Route path=":type/:id" element={<DocumentDetailPage />} />
         </Route>
       </Routes>
