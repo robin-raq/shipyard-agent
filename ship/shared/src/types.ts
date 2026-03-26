@@ -223,3 +223,61 @@ export interface UpdateTeamDTO {
   name?: string;
   description?: string;
 }
+
+// ============================================================================
+// Authentication & Session Management
+// ============================================================================
+
+/**
+ * User credentials for login
+ */
+export interface UserCredentials {
+  username: string;
+  password: string;
+}
+
+/**
+ * User profile information
+ */
+export interface UserProfile {
+  id: string;
+  username: string;
+  email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Session information
+ */
+export interface UserSession {
+  session_id: string;
+  user_id: string;
+  created_at: string;
+  expires_at: string;
+}
+
+/**
+ * Authentication response
+ */
+export interface AuthResponse {
+  user: UserProfile;
+  session: UserSession;
+}
+
+/**
+ * DTO for user registration
+ */
+export interface RegisterUserDTO {
+  username: string;
+  email: string;
+  password: string;
+}
+
+/**
+ * DTO for user login
+ */
+export interface LoginUserDTO {
+  username: string;
+  password: string;
+}

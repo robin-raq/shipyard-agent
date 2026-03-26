@@ -3,6 +3,7 @@ import http from "http";
 import { createApp } from "./app.js";
 import pool from "./db/pool.js";
 import { setupWebSocket } from "./ws.js";
+import { startSessionCleanup } from "./utils/sessionCleanup.js";
 
 const PORT = process.env.PORT || 3000;
 
@@ -14,3 +15,6 @@ server.listen(PORT, () => {
 });
 
 setupWebSocket(server);
+
+// Start periodic session cleanup (every 60 minutes)
+startSessionCleanup(pool, 60);

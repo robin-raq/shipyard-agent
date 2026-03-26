@@ -12,6 +12,10 @@ import { createProjectsRouter } from "./routes/projects.js";
 import { createWeeksRouter } from "./routes/weeks.js";
 import { createTeamsRouter } from "./routes/teams.js";
 import { createShipsRouter } from "./routes/ships.js";
+import { createAuthRouter } from "./routes/auth.js";
+import { createProgramsRouter } from "./routes/programs.js";
+import { createCommentsRouter } from "./routes/comments.js";
+import { createDashboardRouter } from "./routes/dashboard.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -30,6 +34,7 @@ export function createApp(pool: pg.Pool): Express {
   });
 
   // API Routes
+  app.use("/api/auth", createAuthRouter(pool));
   app.use("/api/documents", createDocumentsRouter(pool)); // backward compatibility
   app.use("/api/docs", createDocsRouter(pool));
   app.use("/api/issues", createIssuesRouter(pool));
@@ -37,6 +42,9 @@ export function createApp(pool: pg.Pool): Express {
   app.use("/api/weeks", createWeeksRouter(pool));
   app.use("/api/teams", createTeamsRouter(pool));
   app.use("/api/ships", createShipsRouter(pool));
+  app.use("/api/programs", createProgramsRouter(pool));
+  app.use("/api/comments", createCommentsRouter(pool));
+  app.use("/api/dashboard", createDashboardRouter(pool));
 
   // API Documentation
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

@@ -38,3 +38,13 @@ export {
   createWeek,
   createTeam,
 } from "./factory.js";
+
+// Authentication exports
+export {
+  type UserCredentials,
+  type UserProfile,
+  type UserSession,
+  type AuthResponse,
+  type RegisterUserDTO,
+  type LoginUserDTO,
+} from "./types.js";

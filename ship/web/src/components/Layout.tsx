@@ -10,6 +10,7 @@ export default function Layout() {
     { path: '/weeks', label: 'Weeks', icon: '📅' },
     { path: '/teams', label: 'Teams', icon: '👥' },
     { path: '/ships', label: 'Ships', icon: '⛵' },
+    { path: '/programs', label: 'Programs', icon: '🎯' },
   ];
 
   const isActive = (path: string) => location.pathname.startsWith(path);

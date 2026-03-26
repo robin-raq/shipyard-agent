@@ -3,7 +3,7 @@ import pool from "./pool.js";
 
 const sampleDocs = [
   {
-    name: "Getting Started Guide",
+    title: "Getting Started Guide",
     content: "This guide will help you get started with the Ship platform. Follow these steps to set up your workspace and create your first document.",
   },
   {
@@ -20,8 +20,8 @@ const sampleIssues = [
     priority: "high",
   },
   {
-    name: "Improve performance on dashboard",
-    description: "Dashboard is loading slowly when there are many documents. Consider implementing pagination or lazy loading.",
+    title: "Improve performance on dashboard",
+    content: "Dashboard is loading slowly when there are many documents. Consider implementing pagination or lazy loading.",
     status: "in_progress",
     priority: "medium",
   },
@@ -34,25 +34,25 @@ const sampleProjects = [
   },
   {
     title: "Marketing Website Redesign",
-    content: "Complete redesign of the marketing website with new branding, improved messaging, and better conversion funnel.",
+    description: "Complete redesign of the marketing website with new branding, improved messaging, and better conversion funnel.",
   },
 ];
 
 const sampleWeeks = [
   {
     title: "Week of Jan 15, 2024",
-    description: "This week we shipped the new editor, fixed 12 bugs, and onboarded 3 new customers. Next week focus on performance improvements.",
+    content: "This week we shipped the new editor, fixed 12 bugs, and onboarded 3 new customers. Next week focus on performance improvements.",
   },
   {
     title: "Week of Jan 22, 2024",
-    description: "Performance improvements deployed. Dashboard load time reduced by 40%. Started work on mobile app prototype.",
+    content: "Performance improvements deployed. Dashboard load time reduced by 40%. Started work on mobile app prototype.",
   },
 ];
 
 const sampleTeams = [
   {
-    title: "Engineering Team",
-    content: "The engineering team consists of 8 developers working on backend, frontend, and mobile. We use agile methodology with 2-week sprints.",
+    name: "Engineering Team",
+    description: "The engineering team consists of 8 developers working on backend, frontend, and mobile. We use agile methodology with 2-week sprints.",
   },
   {
     name: "Product Team",
@@ -121,7 +121,7 @@ async function seed() {
       await pool.query(
         `INSERT INTO projects (title, description)
          VALUES ($1, $2)`,
-        [project.title, project.content]
+        [project.title, project.description]
       );
       console.log(`✓ Inserted project: ${project.title}`);
     }
@@ -141,9 +141,9 @@ async function seed() {
       await pool.query(
         `INSERT INTO teams (name, description)
          VALUES ($1, $2)`,
-        [team.title, team.content]
+        [team.name, team.description]
       );
-      console.log(`✓ Inserted team: ${team.title}`);
+      console.log(`✓ Inserted team: ${team.name}`);
     }
 
     // Insert sample ships

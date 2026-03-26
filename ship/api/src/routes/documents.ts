@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import pg from "pg";
+import { createNestedCommentsRoutes } from "./comments.js";
 
 const VALID_DOCUMENT_TYPES = ["doc", "issue", "project", "week", "team"];
 
@@ -168,6 +169,113 @@ export function createDocumentsRouter(pool: pg.Pool): Router {
       }
 
       res.status(200).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Mount nested comments routes
+  // Note: documents table is deprecated, but we support comments for backward compatibility
+  // Comments will use entity_type based on document_type
+  router.get("/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+
+      // Check if document exists
+      const docCheck = await pool.query(
+        "SELECT id, document_type FROM documents WHERE id = $1 AND deleted_at IS NULL",
+        [id]
+      );
+
+      if (docCheck.rows.length === 0) {
+        return res.status(404).json({
+          error: true,
+          message: "Document not found",
+          status: 404,
+        });
+      }
+
+      const document = docCheck.rows[0];
+
+      // Get comments using the document's type as entity_type
+      const result = await pool.query(
+        `SELECT * FROM comments 
+         WHERE entity_type = $1 AND entity_id = $2 AND deleted_at IS NULL
+         ORDER BY created_at DESC`,
+        [document.document_type, id]
+      );
+
+      res.status(200).json(result.rows);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { content, author_name } = req.body;
+
+      // Check if document exists
+      const docCheck = await pool.query(
+        "SELECT id, document_type FROM documents WHERE id = $1 AND deleted_at IS NULL",
+        [id]
+      );
+
+      if (docCheck.rows.length === 0) {
+        return res.status(404).json({
+          error: true,
+          message: "Document not found",
+          status: 404,
+        });
+      }
+
+      const document = docCheck.rows[0];
+
+      // Validate content
+      if (!content) {
+        return res.status(400).json({
+          error: true,
+          message: "content is required",
+          status: 400,
+        });
+      }
+
+      const trimmedContent = content.trim();
+      if (trimmedContent.length === 0) {
+        return res.status(400).json({
+          error: true,
+          message: "content cannot be empty",
+          status: 400,
+        });
+      }
+
+      if (trimmedContent.length > 10000) {
+        return res.status(400).json({
+          error: true,
+          message: "content is too long (max 10000 characters)",
+          status: 400,
+        });
+      }
+
+      // Validate author_name if provided
+      if (author_name && author_name.length > 255) {
+        return res.status(400).json({
+          error: true,
+          message: "author_name is too long (max 255 characters)",
+          status: 400,
+        });
+      }
+
+      // Create comment using the document's type as entity_type
+      const result = await pool.query(
+        `INSERT INTO comments (entity_type, entity_id, content, author_name)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [document.document_type, id, trimmedContent, author_name || "Anonymous"]
+      );
+
+      res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
     }

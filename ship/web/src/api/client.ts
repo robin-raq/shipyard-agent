@@ -253,3 +253,52 @@ export async function deleteShip(id: string) {
   });
   return handleResponse(response);
 }
+
+// Programs API
+export async function getPrograms(options?: { search?: string; limit?: number; offset?: number }) {
+  let url = '/api/programs';
+  if (options) {
+    const params = new URLSearchParams();
+    if (options.search) params.append('search', options.search);
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.offset) params.append('offset', options.offset.toString());
+    const queryString = params.toString();
+    if (queryString) url += `?${queryString}`;
+  }
+  const response = await fetch(url);
+  return handleResponse(response);
+}
+
+export async function getProgram(id: string) {
+  const response = await fetch(`/api/programs/${id}`);
+  return handleResponse(response);
+}
+
+export async function createProgram(data: { name: string; description?: string }) {
+  const response = await fetch('/api/programs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function updateProgram(id: string, data: { name?: string; description?: string }) {
+  const response = await fetch(`/api/programs/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function deleteProgram(id: string) {
+  const response = await fetch(`/api/programs/${id}`, {
+    method: 'DELETE',
+  });
+  return handleResponse(response);
+}

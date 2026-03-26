@@ -1,6 +1,6 @@
 -- Migration: Create ships table
 
-CREATE TABLE ships (
+CREATE TABLE IF NOT EXISTS ships (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
