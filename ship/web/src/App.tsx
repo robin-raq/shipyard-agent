@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
+import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import DocsPage from './pages/DocsPage';
 import IssuesPage from './pages/IssuesPage';
@@ -11,24 +13,63 @@ import ProgramsPage from './pages/ProgramsPage';
 import ProgramDetailPage from './pages/ProgramDetailPage';
 import DocumentDetailPage from './pages/DocumentDetailPage';
 
+function ProtectedRoutes() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="docs" element={<DocsPage />} />
+        <Route path="issues" element={<IssuesPage />} />
+        <Route path="projects" element={<ProjectsPage />} />
+        <Route path="weeks" element={<WeeksPage />} />
+        <Route path="teams" element={<TeamsPage />} />
+        <Route path="ships" element={<ShipsPage />} />
+        <Route path="programs" element={<ProgramsPage />} />
+        <Route path="programs/:id" element={<ProgramDetailPage />} />
+        <Route path=":type/:id" element={<DocumentDetailPage />} />
+      </Route>
+    </Routes>
+  );
+}
+
+function AppRoutes() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/*" element={<ProtectedRoutes />} />
+    </Routes>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="docs" element={<DocsPage />} />
-          <Route path="issues" element={<IssuesPage />} />
-          <Route path="projects" element={<ProjectsPage />} />
-          <Route path="weeks" element={<WeeksPage />} />
-          <Route path="teams" element={<TeamsPage />} />
-          <Route path="ships" element={<ShipsPage />} />
-          <Route path="programs" element={<ProgramsPage />} />
-          <Route path="programs/:id" element={<ProgramDetailPage />} />
-          <Route path=":type/:id" element={<DocumentDetailPage />} />
-        </Route>
-      </Routes>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

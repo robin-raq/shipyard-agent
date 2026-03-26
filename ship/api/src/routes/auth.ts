@@ -133,21 +133,22 @@ export function createAuthRouter(pool: pg.Pool): Router {
    */
   router.post("/login", async (req: Request, res: Response) => {
     try {
-      const { username, password }: LoginUserDTO = req.body;
+      const { username, email, password } = req.body;
+      const identifier = username || email;
 
       // Validate input
-      if (!username || !password) {
+      if (!identifier || !password) {
         return res.status(400).json({
           error: true,
-          message: "Username and password are required",
+          message: "Username/email and password are required",
           status: 400,
         });
       }
 
-      // Find user
+      // Find user by username or email
       const userResult = await pool.query(
-        "SELECT id, username, email, password, created_at, updated_at FROM users WHERE username = $1",
-        [username]
+        "SELECT id, username, email, password, created_at, updated_at FROM users WHERE username = $1 OR email = $1",
+        [identifier]
       );
 
       if (userResult.rows.length === 0) {
