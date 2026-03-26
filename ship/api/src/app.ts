@@ -3,12 +3,15 @@ import cors from "cors";
 import pg from "pg";
 import path from "path";
 import { fileURLToPath } from "url";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./swagger.js";
 import { createDocumentsRouter } from "./routes/documents.js";
 import { createDocsRouter } from "./routes/docs.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { createProjectsRouter } from "./routes/projects.js";
 import { createWeeksRouter } from "./routes/weeks.js";
 import { createTeamsRouter } from "./routes/teams.js";
+import { createShipsRouter } from "./routes/ships.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +36,10 @@ export function createApp(pool: pg.Pool): Express {
   app.use("/api/projects", createProjectsRouter(pool));
   app.use("/api/weeks", createWeeksRouter(pool));
   app.use("/api/teams", createTeamsRouter(pool));
+  app.use("/api/ships", createShipsRouter(pool));
+
+  // API Documentation
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
   // Serve static files from web client (Docker: /app/public, dev: ../../web/dist)
   const webDistPath = process.env.NODE_ENV === "production"
