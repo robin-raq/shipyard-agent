@@ -8,7 +8,17 @@ import { startSessionCleanup } from "./utils/sessionCleanup.js";
 const PORT = process.env.PORT || 3000;
 
 async function start() {
-  // Run migrations on startup in production
+  const app = createApp(pool);
+  const server = http.createServer(app);
+
+  // Start listening FIRST so healthcheck passes
+  server.listen(PORT, () => {
+    console.log(`Ship API server listening on port ${PORT}`);
+  });
+
+  setupWebSocket(server);
+
+  // Run migrations AFTER server is listening
   try {
     const { runMigrations } = await import("./db/migrate.js");
     await runMigrations(pool);
@@ -17,14 +27,6 @@ async function start() {
     console.error("Migration error (non-fatal):", err);
   }
 
-  const app = createApp(pool);
-  const server = http.createServer(app);
-
-  server.listen(PORT, () => {
-    console.log(`Ship API server listening on port ${PORT}`);
-  });
-
-  setupWebSocket(server);
   startSessionCleanup(pool, 60);
 }
 
