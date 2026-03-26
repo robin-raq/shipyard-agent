@@ -21,6 +21,11 @@ export function createApp(pool: pg.Pool): Express {
   app.use(cors());
   app.use(express.json());
 
+  // Health check endpoint (no database dependency)
+  app.get("/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
+
   // API Routes
   app.use("/api/documents", createDocumentsRouter(pool)); // backward compatibility
   app.use("/api/docs", createDocsRouter(pool));
@@ -37,7 +42,8 @@ export function createApp(pool: pg.Pool): Express {
 
   // SPA fallback — serve index.html for all non-API routes
   app.get("*", (req, res, next) => {
-    if (req.path.startsWith("/api")) {
+    // Skip SPA fallback for API routes
+    if (req.path.startsWith("/api/")) {
       return next();
     }
     const indexPath = path.join(webDistPath, "index.html");
