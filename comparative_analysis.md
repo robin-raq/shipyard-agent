@@ -2,7 +2,9 @@
 
 ## 1. Executive Summary
 
-Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, rebuilt the US Treasury Department's Ship application — a real-time collaborative project management platform — over a 4-day sprint. The agent produced a functional monorepo with 12 API routes, 11 frontend pages, authentication, full-text search, comments, and a TipTap rich text editor. The rebuild covers approximately 14% of the original codebase by line count (16,818 vs. 122,920 lines) and 46% of frontend views (11 of 24 pages). The agent excelled at scaffolding CRUD modules rapidly (5 features built in parallel in under 30 minutes) but required human intervention for cross-module consistency, migration ordering, and value mismatches between frontend and backend. Every intervention is logged below with timestamps and root causes.
+Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, rebuilt the US Treasury Department's Ship application — a real-time collaborative project management platform — over a 4-day sprint. The agent produced a functional monorepo with 14 API routes, 11 frontend pages, authentication, full-text search, comments, and a TipTap rich text editor. The rebuild covers approximately 14% of the original codebase by line count (16,818 vs. 122,920 lines) and 46% of frontend views (11 of 24 pages). The agent excelled at scaffolding CRUD modules rapidly (5 features built in parallel in under 30 minutes) but required human intervention for cross-module consistency, migration ordering, and value mismatches between frontend and backend. Every intervention is logged below with timestamps and root causes.
+
+**Bottom line for skimmers:** Parallel scaffolding worked; cross-boundary consistency and infrastructure/ops still needed humans.
 
 ## 2. Architectural Comparison
 
@@ -47,7 +49,10 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 | API route files | 48 | 14 | 29% coverage |
 | Frontend pages | 24 | 11 | 46% coverage |
 | Database migrations | 50+ | 10 | 20% coverage |
-| Trace files generated | — | 172 | — |
+| Frontend build time | not measured (no local build available) | 7.2s (`tsc -b && vite build`) | — |
+| Frontend bundle size (JS, gzipped) | not measured | 201.78 KB (657 KB uncompressed) | Vite warns >500 KB; needs code-splitting |
+| Frontend bundle size (CSS, gzipped) | not measured | 4.37 KB (17.49 KB uncompressed) | — |
+| Trace files generated | — | 172 (LangSmith runs during Ship rebuild + agent dev) | — |
 | Shipyard agent tests | — | 157 (all passing) | — |
 | Time to build MVP agent | — | ~8 hours | — |
 | Time to build Ship (agent-driven) | — | ~6 hours active agent time | — |
@@ -93,7 +98,7 @@ Where the agent genuinely outperformed manual development:
 
 1. **Parallel feature scaffolding:** 5 complete CRUD modules (routes + tests + migrations + frontend pages) built simultaneously in ~30 minutes. A single developer would need 2-3 hours for the same scope sequentially. The multi-agent supervisor dispatched backend, frontend, and database workers concurrently.
 
-2. **Test generation alongside code:** When given explicit TDD instructions, the agent generated comprehensive test suites (75 test files, 19,799 lines). The test-to-code ratio in our build is higher than the original (our tests are 49% of original's test volume while our app code is only 14% of original's volume). The agent is better at generating tests than humans typically are.
+2. **Test generation alongside code:** When given explicit TDD instructions, the agent generated comprehensive test suites (75 test files, 19,799 lines). The test-to-code ratio in our build is higher than the original (our tests are 49% of original's test volume while our app code is only 14% of original's volume). The agent produced faster and more voluminous test generation than a typical manual workflow on a sprint of this length.
 
 3. **Consistent CRUD boilerplate:** Every route file follows the same pattern — factory function, input validation, try/catch, consistent error response format. A human team would develop inconsistencies over 122K lines; the agent's pattern adherence is mechanical and reliable.
 
