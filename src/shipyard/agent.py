@@ -37,7 +37,11 @@ def build_graph(llm=None):
 
     def agent_node(state: AgentState) -> dict:
         """Call the LLM with the current conversation and system prompt."""
-        system_prompt = build_system_prompt(state.get("context", ""))
+        system_prompt = build_system_prompt(
+            context=state.get("context", ""),
+            memories=state.get("memories", ""),
+            rules=state.get("rules", ""),
+        )
         messages = [SystemMessage(content=system_prompt)] + list(state["messages"])
         response = bound_llm.invoke(messages)
         return {"messages": [response]}

@@ -32,6 +32,8 @@ class AgentState(TypedDict):
     """
     messages: Annotated[list, add_messages]
     context: str
+    memories: str
+    rules: str
     trace_steps: list
 
 
@@ -43,10 +45,14 @@ class SupervisorState(TypedDict):
         tasks: Ordered list of subtasks assigned to workers.
         current_task_index: Index of the task currently being executed.
         context: Injected context from /context command.
+        memories: Formatted persistent memories for system prompt.
+        rules: Formatted custom rules for system prompt.
         trace_steps: Accumulator for local JSON trace steps.
     """
     messages: Annotated[list, add_messages]
     tasks: list[TaskItem]
     current_task_index: int
     context: str
+    memories: str
+    rules: str
     trace_steps: list

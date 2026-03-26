@@ -9,6 +9,13 @@ from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from shipyard.agent import build_graph
+from shipyard.memory import (
+    delete_memory,
+    format_memories_for_prompt,
+    load_all_memories,
+    save_memory,
+)
+from shipyard.rules import format_rules_for_prompt, load_all_rules
 from shipyard.supervisor import build_supervisor_graph
 from shipyard.tools import set_workspace
 from shipyard.tracing import TraceCollector
@@ -65,8 +72,19 @@ def main():
     messages = []
     context = ""
 
+    # Load persistent memory and custom rules
+    memories_str = format_memories_for_prompt(load_all_memories())
+    rules_str = format_rules_for_prompt(load_all_rules())
+
+    mem_count = len(load_all_memories())
+    rule_count = len(load_all_rules())
+
     print("Shipyard agent v0.1.0")
-    print("Commands: /quit, /multi, /single, /revert <filepath>, /context <filepath>, /context paste")
+    print("Commands: /quit, /multi, /single, /revert <filepath>,")
+    print("          /context <filepath>, /context paste,")
+    print("          /remember <text>, /forget <id>, /memories")
+    if mem_count or rule_count:
+        print(f"Loaded: {mem_count} memories, {rule_count} rules")
     print()
 
     while True:
@@ -107,6 +125,36 @@ def main():
             print(result)
             continue
 
+        # Memory commands
+        if stripped.startswith("/remember "):
+            text = stripped[len("/remember "):].strip()
+            if text:
+                mem_id = save_memory(text)
+                memories_str = format_memories_for_prompt(load_all_memories())
+                print(f"Saved memory: {mem_id}")
+            else:
+                print("Usage: /remember <text to remember>")
+            continue
+
+        if stripped.startswith("/forget "):
+            mem_id = stripped[len("/forget "):].strip()
+            if delete_memory(mem_id):
+                memories_str = format_memories_for_prompt(load_all_memories())
+                print(f"Deleted memory: {mem_id}")
+            else:
+                print(f"Memory not found: {mem_id}")
+            continue
+
+        if stripped == "/memories":
+            all_mems = load_all_memories()
+            if not all_mems:
+                print("No memories stored.")
+            else:
+                for m in all_mems:
+                    tags = f" [{', '.join(m.get('tags', []))}]" if m.get("tags") else ""
+                    print(f"  {m['id']}: {m['content']}{tags}")
+            continue
+
         # Context injection commands
         if stripped.startswith("/context "):
             arg = stripped[len("/context "):].strip()
@@ -123,6 +171,8 @@ def main():
         invoke_state = {
             "messages": messages,
             "context": context,
+            "memories": memories_str,
+            "rules": rules_str,
             "trace_steps": [],
         }
         if mode == "multi":

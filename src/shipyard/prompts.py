@@ -26,17 +26,24 @@ Do not rewrite entire files when a targeted edit suffices.
 """
 
 
-def build_system_prompt(context: str = "") -> str:
-    """Build the full system prompt, optionally including injected context.
+def build_system_prompt(context: str = "", memories: str = "", rules: str = "") -> str:
+    """Build the full system prompt with optional memories, rules, and context.
 
     Args:
         context: External context to inject (specs, schemas, test output).
-                 Wrapped in <injected_context> tags when non-empty.
+        memories: Formatted persistent memories from .shipyard/memory/.
+        rules: Formatted custom rules from .shipyard/rules/.
 
     Returns:
         The complete system prompt string.
     """
     prompt = SYSTEM_PROMPT
+
+    if rules.strip():
+        prompt += f"\n\n## Custom Rules\n\n{rules}"
+
+    if memories.strip():
+        prompt += f"\n\n## Persistent Memory\n\n{memories}"
 
     if context.strip():
         prompt += (
