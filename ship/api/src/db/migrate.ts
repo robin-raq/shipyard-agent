@@ -7,7 +7,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export async function runMigrations(pool?: pg.Pool): Promise<void> {
-  // Use provided pool or lazy import default pool
   let dbPool: pg.Pool;
   if (pool) {
     dbPool = pool;
@@ -17,19 +16,38 @@ export async function runMigrations(pool?: pg.Pool): Promise<void> {
   }
 
   const migrationsDir = join(__dirname, "migrations");
-  
+
   try {
+    // Create migrations tracking table if it doesn't exist
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        name VARCHAR(255) PRIMARY KEY,
+        run_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Get already-run migrations
+    const { rows: completed } = await dbPool.query(
+      "SELECT name FROM _migrations ORDER BY name"
+    );
+    const completedSet = new Set(completed.map((r: { name: string }) => r.name));
+
     const files = await readdir(migrationsDir);
     const sqlFiles = files
-      .filter((file) => file.endsWith(".sql"))
+      .filter((file) => file.endsWith(".sql") && !file.includes(".skip") && !file.includes(".bak"))
       .sort();
 
     for (const file of sqlFiles) {
+      if (completedSet.has(file)) {
+        continue; // Already run, skip
+      }
+
       const filePath = join(migrationsDir, file);
       const sql = await readFile(filePath, "utf-8");
-      
+
       console.log(`Running migration: ${file}`);
       await dbPool.query(sql);
+      await dbPool.query("INSERT INTO _migrations (name) VALUES ($1)", [file]);
       console.log(`✓ Completed migration: ${file}`);
     }
 
@@ -44,7 +62,7 @@ export async function runMigrations(pool?: pg.Pool): Promise<void> {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const poolModule = await import("./pool.js");
   const pool = poolModule.default;
-  
+
   try {
     await runMigrations(pool);
     await pool.end();
