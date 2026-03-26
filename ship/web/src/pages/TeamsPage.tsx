@@ -118,7 +118,7 @@ export default function TeamsPage() {
 
   const handleCreate = async (data: { name: string; content: string }) => {
     try {
-      await createTeam(data);
+      await createTeam({ name: data.name, description: data.content });
       setShowCreateForm(false);
       await fetchTeams();
     } catch (err) {
