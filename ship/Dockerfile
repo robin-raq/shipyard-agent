@@ -3,6 +3,9 @@
 # Builds both API server and Web client
 # ============================================
 
+# Cache busting argument
+ARG CACHE_BUST=1
+
 # --------------------------------------------
 # Stage 1: Base - Node.js with pnpm
 # --------------------------------------------
@@ -18,8 +21,10 @@ WORKDIR /app
 # --------------------------------------------
 FROM base AS dependencies
 
-# Copy workspace configuration
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+# Copy workspace configuration and lock file separately
+# This ensures package changes bust the cache
+COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-lock.yaml ./
 
 # Copy package.json files for all workspaces
 COPY shared/package.json ./shared/
@@ -34,6 +39,10 @@ RUN pnpm install --frozen-lockfile
 # --------------------------------------------
 FROM dependencies AS build-shared
 
+# Bust cache to ensure fresh source code
+ARG CACHE_BUST=1
+RUN echo "Cache bust: $CACHE_BUST"
+
 # Copy shared package source
 COPY shared ./shared
 COPY tsconfig.base.json ./
@@ -46,6 +55,10 @@ RUN pnpm --filter @ship/shared build
 # --------------------------------------------
 FROM build-shared AS build-api
 
+# Bust cache to ensure fresh source code
+ARG CACHE_BUST=1
+RUN echo "Cache bust: $CACHE_BUST"
+
 # Copy API source code
 COPY api/src ./api/src
 COPY api/tsconfig.json ./api/
@@ -57,6 +70,10 @@ RUN pnpm --filter @ship/api build
 # Stage 5: Build Web - Build web client
 # --------------------------------------------
 FROM build-shared AS build-web
+
+# Bust cache to ensure fresh source code
+ARG CACHE_BUST=1
+RUN echo "Cache bust: $CACHE_BUST"
 
 # Copy web client source
 COPY web ./web
