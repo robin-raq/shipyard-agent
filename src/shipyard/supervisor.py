@@ -134,6 +134,11 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
     """
     index = state["current_task_index"]
     tasks = list(state["tasks"])
+
+    # Guard: if no tasks or index out of range, skip to validate
+    if not tasks or index >= len(tasks):
+        return {"tasks": tasks, "current_task_index": index}
+
     task = tasks[index]
 
     # Build context from previous task results
@@ -167,7 +172,8 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
 
 def check_if_done(state: SupervisorState) -> str:
     """Route back to execute_next_task if tasks remain, else to validate."""
-    if state["current_task_index"] < len(state["tasks"]):
+    tasks = state.get("tasks", [])
+    if tasks and state["current_task_index"] < len(tasks):
         return "execute_next_task"
     return "validate"
 
