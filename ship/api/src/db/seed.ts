@@ -1,5 +1,6 @@
 import "dotenv/config";
 import pool from "./pool.js";
+import { hashPassword } from "../utils/auth.js";
 
 const sampleDocs = [
   {
@@ -94,7 +95,17 @@ async function seed() {
     await pool.query("DELETE FROM weeks");
     await pool.query("DELETE FROM teams");
     await pool.query("DELETE FROM ships");
+    await pool.query("DELETE FROM users WHERE email = 'dev@ship.local'");
     console.log("Cleared existing data");
+
+    // Insert development user
+    const devPassword = await hashPassword("shipdev123");
+    await pool.query(
+      `INSERT INTO users (username, email, password)
+       VALUES ($1, $2, $3)`,
+      ["developer", "dev@ship.local", devPassword]
+    );
+    console.log("✓ Inserted development user: dev@ship.local");
 
     // Insert sample docs
     for (const doc of sampleDocs) {
@@ -157,6 +168,7 @@ async function seed() {
     }
 
     console.log(`\nSuccessfully seeded database:`);
+    console.log(`- 1 development user`);
     console.log(`- ${sampleDocs.length} docs`);
     console.log(`- ${sampleIssues.length} issues`);
     console.log(`- ${sampleProjects.length} projects`);

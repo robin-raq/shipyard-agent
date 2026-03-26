@@ -16,6 +16,7 @@ import { createAuthRouter } from "./routes/auth.js";
 import { createProgramsRouter } from "./routes/programs.js";
 import { createCommentsRouter } from "./routes/comments.js";
 import { createDashboardRouter } from "./routes/dashboard.js";
+import { createSearchRouter } from "./routes/search.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -45,6 +46,7 @@ export function createApp(pool: pg.Pool): Express {
   app.use("/api/programs", createProgramsRouter(pool));
   app.use("/api/comments", createCommentsRouter(pool));
   app.use("/api/dashboard", createDashboardRouter(pool));
+  app.use("/api/search", createSearchRouter(pool));
 
   // API Documentation
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

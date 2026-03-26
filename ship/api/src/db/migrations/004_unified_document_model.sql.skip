@@ -1,0 +1,24 @@
+-- Migration: 004_unified_document_model.sql
+
+-- This migration creates a unified documents table to store various document types.
+
+CREATE TABLE IF NOT EXISTS documents (
+    id SERIAL PRIMARY KEY,
+    document_type VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    properties JSONB,
+    parent_id INT,
+    project_id INT,
+    program_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
+    FOREIGN KEY (parent_id) REFERENCES documents(id) ON DELETE SET NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (program_id) REFERENCES programs(id) ON DELETE CASCADE
+);
+
+-- Add indexes for performance
+CREATE INDEX IF NOT EXISTS idx_documents_project_id ON documents(project_id);
+CREATE INDEX IF NOT EXISTS idx_documents_program_id ON documents(program_id);
+CREATE INDEX IF NOT EXISTS idx_documents_parent_id ON documents(parent_id);

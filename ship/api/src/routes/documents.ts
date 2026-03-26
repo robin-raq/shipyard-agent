@@ -2,18 +2,19 @@ import { Router, Request, Response, NextFunction } from "express";
 import pg from "pg";
 import { createNestedCommentsRoutes } from "./comments.js";
 
-const VALID_DOCUMENT_TYPES = ["doc", "issue", "project", "week", "team"];
+const VALID_DOCUMENT_TYPES = ["doc", "issue", "project", "week", "team", "ship"];
 
 export function createDocumentsRouter(pool: pg.Pool): Router {
   const router = Router();
 
-  // GET / - list documents with optional type filter
+  // GET / - list documents with optional type and status filters
   router.get("/", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { type } = req.query;
+      const { type, status } = req.query;
 
       let query = "SELECT * FROM documents WHERE deleted_at IS NULL";
       const params: string[] = [];
+      let paramCount = 1;
 
       if (type) {
         if (!VALID_DOCUMENT_TYPES.includes(type as string)) {
@@ -23,8 +24,15 @@ export function createDocumentsRouter(pool: pg.Pool): Router {
             status: 400,
           });
         }
-        query += " AND document_type = $1";
+        query += ` AND document_type = $${paramCount}`;
         params.push(type as string);
+        paramCount++;
+      }
+
+      if (status) {
+        query += ` AND status = $${paramCount}`;
+        params.push(status as string);
+        paramCount++;
       }
 
       query += " ORDER BY created_at DESC";
@@ -147,6 +155,69 @@ export function createDocumentsRouter(pool: pg.Pool): Router {
     }
   });
 
+  // PATCH /:id - partial update document
+  router.patch("/:id", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { title, content, properties, status } = req.body;
+
+      const updates: string[] = [];
+      const params: any[] = [];
+      let paramCount = 1;
+
+      if (title !== undefined) {
+        updates.push(`title = $${paramCount++}`);
+        params.push(title);
+      }
+
+      if (content !== undefined) {
+        updates.push(`content = $${paramCount++}`);
+        params.push(content);
+      }
+
+      if (properties !== undefined) {
+        updates.push(`properties = $${paramCount++}`);
+        params.push(properties);
+      }
+
+      if (status !== undefined) {
+        updates.push(`status = $${paramCount++}`);
+        params.push(status);
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({
+          error: true,
+          message: "No fields to update",
+          status: 400,
+        });
+      }
+
+      updates.push(`updated_at = NOW()`);
+      params.push(id);
+
+      const result = await pool.query(
+        `UPDATE documents
+         SET ${updates.join(", ")}
+         WHERE id = $${paramCount} AND deleted_at IS NULL
+         RETURNING *`,
+        params
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          error: true,
+          message: "Document not found",
+          status: 404,
+        });
+      }
+
+      res.status(200).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // DELETE /:id - soft delete document
   router.delete("/:id", async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -169,6 +240,40 @@ export function createDocumentsRouter(pool: pg.Pool): Router {
       }
 
       res.status(200).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /:id/associations - get related documents based on associations
+  router.get("/:id/associations", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+
+      // Check if the document exists
+      const documentCheck = await pool.query(
+        "SELECT * FROM documents WHERE id = $1 AND deleted_at IS NULL",
+        [id]
+      );
+
+      if (documentCheck.rows.length === 0) {
+        return res.status(404).json({
+          error: true,
+          message: "Document not found or already deleted",
+          status: 404,
+        });
+      }
+
+      // Retrieve related documents based on associations
+      const associations = await pool.query(
+        `SELECT d.*
+         FROM document_associations da
+         JOIN documents d ON da.related_id = d.id
+         WHERE da.document_id = $1 AND d.deleted_at IS NULL`,
+        [id]
+      );
+
+      res.status(200).json(associations.rows);
     } catch (err) {
       next(err);
     }
