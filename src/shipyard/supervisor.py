@@ -64,14 +64,64 @@ def parse_task_plan(llm_output: str) -> list[dict]:
     return tasks
 
 
+PLAN_VALIDATION_PROMPT = """\
+You are a quality gate. Compare the original user instruction against the \
+proposed task plan. Your job is to REMOVE any tasks that the user did NOT \
+explicitly request.
+
+## Original instruction:
+{instruction}
+
+## Proposed tasks:
+{task_json}
+
+## Rules:
+- If a task does not clearly map to something in the original instruction, \
+REMOVE it from the list.
+- If a task invents a new feature, endpoint, component, or page that the user \
+did not mention, REMOVE it.
+- If the user said "fix X", only keep tasks that fix X. Do not add "build Y".
+- Return the filtered task list as a JSON code block. If all tasks are valid, \
+return them unchanged.
+- If ALL tasks are invalid, return a single task with worker "backend" and the \
+full original instruction as the description.
+
+Return ONLY a ```json``` code block.
+"""
+
+
 def decompose(state: SupervisorState, llm) -> dict:
     """Decompose the user's instruction into an ordered task plan.
 
-    Calls the supervisor LLM to produce a JSON task list, then parses it.
+    Calls the supervisor LLM to produce a JSON task list, then validates
+    the plan against the original instruction to prevent hallucination.
     """
     messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + list(state["messages"])
     response = llm.invoke(messages)
     tasks = parse_task_plan(response.content)
+
+    # Extract the user's original instruction for validation
+    user_instruction = ""
+    for msg in state["messages"]:
+        if isinstance(msg, HumanMessage):
+            user_instruction = msg.content
+            break
+
+    # Validate plan against original instruction
+    if user_instruction and len(tasks) > 1:
+        task_json = json.dumps(
+            [{"worker": t["worker"], "description": t["description"]} for t in tasks],
+            indent=2,
+        )
+        validation_prompt = PLAN_VALIDATION_PROMPT.format(
+            instruction=user_instruction,
+            task_json=task_json,
+        )
+        validation_response = llm.invoke([SystemMessage(content=validation_prompt)])
+        validated_tasks = parse_task_plan(validation_response.content)
+        if validated_tasks:
+            tasks = validated_tasks
+
     return {"tasks": tasks, "current_task_index": 0}
 
 
