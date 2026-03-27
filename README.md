@@ -153,9 +153,45 @@ tests/
 └── conftest.py             # Shared fixtures
 ```
 
+## Ship App (Agent-Built Rebuild)
+
+The Shipyard agent rebuilt the US Treasury Department's [Ship](https://github.com/US-Department-of-the-Treasury/ship) app — a real-time collaborative project management platform.
+
+**Live URL:** https://ship-app-production-fd9d.up.railway.app
+
+### Login Credentials
+
+| Field | Value |
+|-------|-------|
+| Email | `dev@ship.local` |
+| Password | `shipdev123` |
+
+### What's Included
+
+- **14 API routes:** docs, issues, projects, weeks, teams, ships, programs, comments, dashboard, search, auth, documents, health, swagger
+- **11 frontend pages:** Dashboard, Docs, Issues, Projects, Weeks, Teams, Ships, Programs, Login, Document Detail, Program Detail
+- **Features:** Authentication with sessions, full-text search (PostgreSQL tsvector), comments with threading, programs with associations, WCAG 2.1 AA accessibility, OpenAPI/Swagger docs at `/api-docs`
+- **Stack:** React + Vite + TailwindCSS (frontend), Express + PostgreSQL (API), Railway (deployment)
+
+### API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check |
+| `GET /api-docs` | Swagger documentation |
+| `POST /api/auth/login` | Login (email + password) |
+| `GET /api/docs` | List documents |
+| `GET /api/issues` | List issues (filterable by status, priority) |
+| `GET /api/projects` | List projects |
+| `GET /api/programs` | List programs |
+| `GET /api/search?q=...` | Full-text search across all documents |
+
 ## Documentation
 
 - **CODEAGENT.md** — detailed agent architecture, editing strategy, tracing, multi-agent design
+- **COMPARATIVE_ANALYSIS.md** — 7-section analysis: agent-built vs original Ship (benchmarks, interventions, trade-offs)
+- **AI_DEVELOPMENT_LOG.md** — rebuild session log with 21 actions, 11 interventions
+- **AI_COST_ANALYSIS.md** — token usage, cost breakdown, production scaling model
 - **PRESEARCH.md** — research phase: architecture decisions, alternatives considered
 - **MVP_PRD.md** — MVP product requirements
 - **FINAL_PRD.md** — Full project requirements (multi-agent + Ship rebuild)
