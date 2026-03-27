@@ -57,10 +57,10 @@ export function createApp(pool: pg.Pool): Express {
     : path.join(__dirname, "../../web/dist");
   app.use(express.static(webDistPath));
 
-  // SPA fallback — serve index.html for all non-API routes
+  // SPA fallback — serve index.html for frontend routes only
   app.get("*", (req, res, next) => {
-    // Skip SPA fallback for API routes
-    if (req.path.startsWith("/api/")) {
+    // Skip SPA fallback for API routes, health, and docs
+    if (req.path.startsWith("/api") || req.path === "/health" || req.path.startsWith("/api-docs")) {
       return next();
     }
     const indexPath = path.join(webDistPath, "index.html");
