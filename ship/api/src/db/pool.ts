@@ -6,16 +6,16 @@ const DATABASE_URL =
 
 const isProduction = process.env.NODE_ENV === "production";
 
-let pool: pg.Pool | null = null;
+const pool = new pg.Pool({
+  connectionString: DATABASE_URL,
+  ssl: isProduction ? { rejectUnauthorized: false } : false,
+  connectionTimeoutMillis: 10000,
+  max: 10,
+});
 
-export function getPool(): pg.Pool {
-  if (!pool) {
-    pool = new pg.Pool({
-      connectionString: DATABASE_URL,
-      ssl: isProduction ? { rejectUnauthorized: false } : false,
-    });
-  }
-  return pool;
-}
+// Log connection errors instead of crashing
+pool.on("error", (err) => {
+  console.error("Unexpected database pool error:", err.message);
+});
 
-export default getPool();
+export default pool;
