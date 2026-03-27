@@ -294,7 +294,9 @@ shipyard> /quit
 
 ## Test Suite
 
-109 tests across 9 test files:
+157 tests across 11 test files (agent) + 69 test files (Ship app):
+
+### Agent Tests
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -307,5 +309,46 @@ shipyard> /quit
 | `test_worker_prompts.py` | 8 | Prompt content: base rules, scoping, JSON output |
 | `test_supervisor.py` | 15 | Decomposition, execution, routing, validation, worker allowlist |
 | `test_models.py` | 8 | Model selection: role mapping, fallback, force override |
+| `test_memory.py` | 12 | Persistent memory: save, load, forget, list |
+| `test_rules.py` | 6 | Custom rules: load from directory, inject into prompt |
+| `test_evals.py` | 30 | Evaluation harness: 12 tasks, scoring, reporting |
 
-Run with: `pytest -v`
+### Ship App Tests (Agent-Generated)
+
+69 test files covering: routes (CRUD for all entities), auth (login/logout/session), dashboard, programs, comments, search, unified document model, case transforms.
+
+Run agent tests: `pytest -v`
+Run Ship tests: `cd ship && pnpm --filter api run test`
+
+---
+
+## Deployment
+
+### Ship App (Railway)
+
+- **URL:** https://ship-app-production-fd9d.up.railway.app
+- **Stack:** Express API + React SPA + PostgreSQL (Railway managed)
+- **Health:** `/health` → `{"status":"ok"}`
+- **API:** `/api/docs`, `/api/issues`, `/api/projects`, `/api/weeks`, `/api/teams`, `/api/ships`, `/api/programs`, `/api/comments`, `/api/dashboard`, `/api/search`, `/api/auth`
+- **Swagger:** `/api-docs`
+
+### Shipyard Agent
+
+Runs locally via `python -m shipyard`. Not deployed (local-only per PRD Phase 1 constraints).
+
+---
+
+## Project Stats
+
+| Metric | Value |
+|--------|-------|
+| Total commits | 63 |
+| Agent-generated commits | 15 |
+| LangSmith traces | 174+ |
+| Local JSON traces | 174 files |
+| Agent test count | 157 (all passing) |
+| Ship app test files | 69 |
+| Ship source lines | 16,818 |
+| Original Ship lines | 122,920 (14% coverage) |
+| Human interventions | 11 |
+| API cost (Sonnet pricing) | ~$4.32 (last 100 traced runs) |

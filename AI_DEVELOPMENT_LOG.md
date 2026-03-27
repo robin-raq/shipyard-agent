@@ -95,3 +95,52 @@ Out of 38 total commits: 11 are "(agent-generated)" via the Shipyard agent, 27 v
 4. **Specific prompts > general prompts.** "Fix the column names in teams.ts" succeeded 100% of the time. "Fix bugs in the Ship app" triggered hallucination. The more precise the instruction, the better the output.
 
 5. **The agent is a force multiplier, not a replacement.** It excels at boilerplate (CRUD routes, types, tests, migrations) and struggles with judgment calls (architecture, security, environment debugging). The optimal workflow is: human makes decisions, agent executes them.
+
+---
+
+## 6. Rebuild Session Log (March 25–27)
+
+Chronological log of the Ship app rebuild using the Shipyard agent. Each entry records what was attempted, what happened, and any human intervention required.
+
+| Time | Action | Mode | Result | Intervention? |
+|------|--------|------|--------|---------------|
+| Mar 25 13:04 | Scaffold pnpm monorepo | Claude Code | ✅ ship/api, ship/web, ship/shared | No |
+| Mar 25 14:09 | Generate shared types + DB layer | Agent (single) | ✅ Types, pool, migrations | No |
+| Mar 25 14:16 | Generate CRUD routes for /api/documents | Agent (single) | ✅ All endpoints working | No |
+| Mar 25 14:19 | Generate React CRUD UI (4 views) | Agent (single) | ✅ Docs, Issues, Projects, Teams pages | No |
+| Mar 25 14:50 | Run tests | Human | ❌ Empty test suite fails | Yes — added `--passWithNoTests` |
+| Mar 25 15:28 | Docker build for Railway | Agent + Human | ❌ Multi-stage Dockerfile broken | Yes — simplified to single-stage |
+| Mar 25 16:16 | Refactor to separate tables per entity | Agent (single) | ✅ Migration + routes generated | No |
+| Mar 25 16:57 | Seed database | Human | ❌ Column name mismatch (name vs title) | Yes — fixed seed.ts manually |
+| Mar 25 17:28 | SPA fallback breaking API routes | Human | ❌ /api/* returning HTML | Yes — added path exclusion |
+| Mar 25 19:10 | Railway healthcheck failing | Agent (single) | ✅ Agent added /health endpoint | No |
+| Mar 26 07:00 | Fix 6 Ship app bugs | Agent (multi) | ⚠️ Fixed 5/6 but hallucinated extra features | Yes — added grounding rules |
+| Mar 26 09:53 | 5 features in parallel (Swagger, WCAG, Ships, TipTap, WebSocket) | Agent (multi) | ✅ All 5 completed in 32 min | No |
+| Mar 26 12:02 | 5 TDD features in parallel | Agent (multi) | ❌ All 5 crashed — supervisor IndexError | Yes — bounds check fix |
+| Mar 26 12:19 | Re-run: Dashboard + unified docs | Agent (multi) | ✅ Dashboard page + API + tests | No |
+| Mar 26 12:33 | Re-run: Auth, programs, comments, search | Agent (multi) | ✅ All 4 features with tests | No |
+| Mar 26 12:45 | Run migrations | Human | ❌ Non-idempotent CREATE TABLE | Yes — added _migrations tracking |
+| Mar 26 12:48 | Issue filter dropdowns broken | Human | ❌ in-progress vs in_progress mismatch | Yes — fixed frontend values |
+| Mar 26 13:41 | Login page not working | Human | ❌ Backend expected username, frontend sent email | Yes — aligned field names |
+| Mar 26 19:01 | Railway deploy — server not responding | Human | ❌ Server binding to localhost not 0.0.0.0 | Yes — bound to 0.0.0.0 |
+| Mar 26 21:20 | Railway deploy — /health returning HTML | Human | ❌ Stale deploy (Mar 25 image) | Yes — set root directory to ship/ |
+| Mar 27 01:25 | Migrate + seed Railway Postgres | Human | ✅ All tables created, data seeded | No |
+
+**Total: 21 actions, 11 required human intervention (52% autonomous success rate)**
+
+---
+
+## 7. Final Statistics
+
+| Metric | Value |
+|--------|-------|
+| Total development time | ~4 days (Mar 23–27) |
+| Commits | 63 |
+| Agent-generated commits | 15 |
+| Ship app source lines | 16,818 |
+| Ship app test files | 69 |
+| Agent test count | 157 (all passing) |
+| LangSmith traces | 174+ |
+| Human interventions | 11 |
+| Estimated API cost | ~$4.32 (Sonnet pricing, last 100 traced runs) |
+| Deployed URL | https://ship-app-production-fd9d.up.railway.app |
