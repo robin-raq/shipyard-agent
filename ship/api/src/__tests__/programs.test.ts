@@ -13,6 +13,15 @@ let app: ReturnType<typeof createApp>;
 
 beforeAll(async () => {
   pool = new pg.Pool({ connectionString: TEST_DATABASE_URL });
+  
+  // Clean up the test database before running migrations
+  await pool.query(`
+    DROP SCHEMA public CASCADE;
+    CREATE SCHEMA public;
+    GRANT ALL ON SCHEMA public TO ship;
+    GRANT ALL ON SCHEMA public TO public;
+  `);
+  
   await runMigrations(pool);
   app = createApp(pool);
 });

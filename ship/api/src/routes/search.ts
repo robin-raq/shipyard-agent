@@ -70,15 +70,19 @@ export function createSearchRouter(pool: pg.Pool): Router {
             content, 
             created_at, 
             updated_at,
-            'document' as type
+            'document' as type,
+            ts_rank(
+              to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, '')),
+              plainto_tsquery('english', $1)
+            ) as rank
           FROM docs
           WHERE deleted_at IS NULL
-            AND (LOWER(title) LIKE LOWER($1) 
-                 OR LOWER(content) LIKE LOWER($1))
-          ORDER BY updated_at DESC
+            AND to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, '')) 
+                @@ plainto_tsquery('english', $1)
+          ORDER BY rank DESC, updated_at DESC
           LIMIT 50
         `;
-        const docResult = await pool.query(docQuery, [`%${searchQuery}%`]);
+        const docResult = await pool.query(docQuery, [searchQuery]);
         results.push(...docResult.rows);
       }
 
@@ -93,15 +97,19 @@ export function createSearchRouter(pool: pg.Pool): Router {
             priority,
             created_at, 
             updated_at,
-            'issue' as type
+            'issue' as type,
+            ts_rank(
+              to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, '')),
+              plainto_tsquery('english', $1)
+            ) as rank
           FROM issues
           WHERE deleted_at IS NULL
-            AND (LOWER(title) LIKE LOWER($1) 
-                 OR LOWER(content) LIKE LOWER($1))
-          ORDER BY updated_at DESC
+            AND to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, '')) 
+                @@ plainto_tsquery('english', $1)
+          ORDER BY rank DESC, updated_at DESC
           LIMIT 50
         `;
-        const issueResult = await pool.query(issueQuery, [`%${searchQuery}%`]);
+        const issueResult = await pool.query(issueQuery, [searchQuery]);
         results.push(...issueResult.rows);
       }
 
@@ -115,20 +123,29 @@ export function createSearchRouter(pool: pg.Pool): Router {
             status,
             created_at, 
             updated_at,
-            'project' as type
+            'project' as type,
+            ts_rank(
+              to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(description, '')),
+              plainto_tsquery('english', $1)
+            ) as rank
           FROM projects
           WHERE deleted_at IS NULL
-            AND (LOWER(title) LIKE LOWER($1) 
-                 OR LOWER(description) LIKE LOWER($1))
-          ORDER BY updated_at DESC
+            AND to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(description, '')) 
+                @@ plainto_tsquery('english', $1)
+          ORDER BY rank DESC, updated_at DESC
           LIMIT 50
         `;
-        const projectResult = await pool.query(projectQuery, [`%${searchQuery}%`]);
+        const projectResult = await pool.query(projectQuery, [searchQuery]);
         results.push(...projectResult.rows);
       }
 
-      // Sort all results by updated_at (most recent first)
+      // Sort all results by rank (relevance) first, then by updated_at
       results.sort((a, b) => {
+        // Sort by rank (descending - higher rank first)
+        if (a.rank !== b.rank) {
+          return b.rank - a.rank;
+        }
+        // If ranks are equal, sort by updated_at (most recent first)
         const dateA = new Date(a.updated_at).getTime();
         const dateB = new Date(b.updated_at).getTime();
         return dateB - dateA;

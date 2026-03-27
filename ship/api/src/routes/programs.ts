@@ -1,6 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
 import pg from "pg";
-import { keysToCamel } from "../utils/caseTransform.js";
 
 /**
  * @swagger
@@ -108,8 +107,10 @@ export function createProgramsRouter(pool: pg.Pool): Router {
 
       // Add search filter if provided
       if (search && typeof search === "string") {
+        // Escape special characters in LIKE patterns
+        const escapedSearch = search.replace(/[%_]/g, '\\$&');
         query += ` AND (name ILIKE $${paramCount} OR description ILIKE $${paramCount})`;
-        params.push(`%${search}%`);
+        params.push(`%${escapedSearch}%`);
         paramCount++;
       }
 
@@ -125,7 +126,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
       const result = await pool.query(query, params);
 
       res.status(200).json({
-        programs: keysToCamel(result.rows),
+        programs: result.rows,
         total,
       });
     } catch (err) {
@@ -173,7 +174,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -229,7 +230,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         [name, description || null]
       );
 
-      res.status(201).json(keysToCamel(result.rows[0]));
+      res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -319,7 +320,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -409,7 +410,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -457,7 +458,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -513,7 +514,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         [id]
       );
 
-      res.status(200).json(keysToCamel(result.rows));
+      res.status(200).json(result.rows);
     } catch (err) {
       next(err);
     }
@@ -603,7 +604,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         [id, user_id, role]
       );
 
-      res.status(201).json(keysToCamel(result.rows[0]));
+      res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -688,7 +689,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -773,7 +774,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -827,7 +828,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -909,7 +910,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
 
       const result = await pool.query(query, params);
 
-      res.status(200).json(keysToCamel(result.rows));
+      res.status(200).json(result.rows);
     } catch (err) {
       next(err);
     }
@@ -1008,7 +1009,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         ]
       );
 
-      res.status(201).json(keysToCamel(result.rows[0]));
+      res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -1115,7 +1116,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -1167,7 +1168,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -1238,7 +1239,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
 
       const result = await pool.query(query, params);
 
-      res.status(200).json(keysToCamel(result.rows));
+      res.status(200).json(result.rows);
     } catch (err) {
       next(err);
     }
@@ -1322,7 +1323,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         [title, description || "", status || "active", id]
       );
 
-      res.status(201).json(keysToCamel(result.rows[0]));
+      res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -1421,7 +1422,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -1473,7 +1474,7 @@ export function createProgramsRouter(pool: pg.Pool): Router {
         });
       }
 
-      res.status(200).json(keysToCamel(result.rows[0]));
+      res.status(200).json(result.rows[0]);
     } catch (err) {
       next(err);
     }

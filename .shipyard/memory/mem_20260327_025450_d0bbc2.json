@@ -1,0 +1,6 @@
+{
+  "id": "mem_20260327_025450_d0bbc2",
+  "content": "The Ship app uses snake_case for database columns, not camelCase",
+  "tags": [],
+  "created_at": "2026-03-27T02:54:50.930521+00:00"
+}
