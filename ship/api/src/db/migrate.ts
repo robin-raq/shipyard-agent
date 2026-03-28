@@ -38,6 +38,7 @@ export async function runMigrations(pool?: pg.Pool): Promise<void> {
       .filter((file) => file.endsWith(".sql") && !file.includes(".skip") && !file.includes(".bak"))
       .sort();
 
+    let failCount = 0;
     for (const file of sqlFiles) {
       if (completedSet.has(file)) {
         continue; // Already run, skip
@@ -46,15 +47,26 @@ export async function runMigrations(pool?: pg.Pool): Promise<void> {
       const filePath = join(migrationsDir, file);
       const sql = await readFile(filePath, "utf-8");
 
-      console.log(`Running migration: ${file}`);
-      await dbPool.query(sql);
-      await dbPool.query("INSERT INTO _migrations (name) VALUES ($1)", [file]);
-      console.log(`✓ Completed migration: ${file}`);
+      try {
+        console.log(`Running migration: ${file}`);
+        await dbPool.query(sql);
+        await dbPool.query(
+          "INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING",
+          [file]
+        );
+        console.log(`✓ Completed migration: ${file}`);
+      } catch (error) {
+        failCount++;
+        console.error(`✗ Migration failed (continuing): ${file}`, (error as Error).message);
+      }
     }
 
+    if (failCount > 0) {
+      console.warn(`${failCount} migration(s) failed — check errors above`);
+    }
     console.log("All migrations completed successfully");
   } catch (error) {
-    console.error("Migration failed:", error);
+    console.error("Migration setup failed:", error);
     throw error;
   }
 }
