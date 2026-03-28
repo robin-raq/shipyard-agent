@@ -56,7 +56,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     authFetch('/api/auth/me')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setUser(data?.user ?? null))
+      .then((data) => {
+        // /me returns user directly, not wrapped in { user: ... }
+        if (data?.id) {
+          setUser(data);
+        } else {
+          setUser(data?.user ?? null);
+        }
+      })
       .catch(() => {
         clearSessionToken();
         setUser(null);
