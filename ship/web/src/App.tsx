@@ -12,6 +12,7 @@ import ShipsPage from './pages/ShipsPage';
 import ProgramsPage from './pages/ProgramsPage';
 import ProgramDetailPage from './pages/ProgramDetailPage';
 import DocumentDetailPage from './pages/DocumentDetailPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
@@ -31,6 +32,8 @@ function ProtectedRoutes() {
       <Route path="/" element={<Layout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="admin-dashboard" element={<AdminDashboardPage />} />
+        <Route path="admin" element={<AdminDashboardPage />} />
         <Route path="docs" element={<DocsPage />} />
         <Route path="issues" element={<IssuesPage />} />
         <Route path="projects" element={<ProjectsPage />} />
