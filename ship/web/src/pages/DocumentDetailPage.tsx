@@ -233,7 +233,7 @@ export default function DocumentDetailPage() {
 
             <div className="prose max-w-none">
               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <pre className="whitespace-pre-wrap font-sans text-gray-800">{displayContent}</pre>
+                <RichTextEditor content={displayContent} onChange={() => {}} editable={false} />
               </div>
             </div>
           </section>

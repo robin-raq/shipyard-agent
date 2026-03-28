@@ -10,4 +10,15 @@ export default defineConfig({
       "/api": "http://localhost:3000",
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-tiptap': ['@tiptap/react', '@tiptap/starter-kit'],
+          'vendor-dndkit': ['@dnd-kit/core', '@dnd-kit/sortable'],
+        },
+      },
+    },
+  },
 });
