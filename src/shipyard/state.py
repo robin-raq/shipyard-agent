@@ -49,6 +49,8 @@ class SupervisorState(TypedDict):
         rules: Formatted custom rules for system prompt.
         trace_steps: Accumulator for local JSON trace steps.
         codebase_patterns: Extracted patterns from exemplar files in workspace.
+        shared_contract: LLM-generated TypeScript interface contract shared by all workers.
+        project_state: Formatted inventory of existing routes, migrations, pages, etc.
     """
     messages: Annotated[list, add_messages]
     tasks: list[TaskItem]
@@ -58,5 +60,7 @@ class SupervisorState(TypedDict):
     rules: str
     trace_steps: list
     codebase_patterns: str
+    shared_contract: str
+    project_state: str
     retry_counts: dict
     token_usage: dict
