@@ -4,8 +4,8 @@ Decomposes user instructions into ordered subtasks, dispatches each
 to a specialized worker subgraph, and validates the combined results.
 
 Graph shape:
-    START → decompose → gather_context → execute_next_task → check_if_done ──→ execute_next_task
-                                                                   └──→ validate → END
+    START → decompose → gather_context → execute_next_task → verify_task → check_if_done ──→ execute_next_task
+                                                                                  └──→ validate → END
 """
 
 import json
@@ -318,6 +318,90 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
     return {"tasks": tasks, "current_task_index": index + 1}
 
 
+def verify_task(state: SupervisorState) -> dict:
+    """Run build verification after a task completes.
+
+    For backend/frontend workers, runs TypeScript compilation check.
+    If compilation fails and retries < 2, sets task back to pending
+    with the compiler error appended so the worker can self-correct.
+    """
+    import subprocess
+    from shipyard.tools import _workspace_root
+
+    tasks = list(state["tasks"])
+    index = state["current_task_index"] - 1  # Just-completed task
+    retry_counts = dict(state.get("retry_counts", {}))
+
+    if index < 0 or index >= len(tasks):
+        return {"tasks": tasks, "retry_counts": retry_counts}
+
+    task = tasks[index]
+
+    # Skip verification for non-code workers and failed tasks
+    if task["worker"] in ("database", "shared") or task["status"] != "done":
+        return {"tasks": tasks, "retry_counts": retry_counts}
+
+    # Determine which directory to check
+    if _workspace_root is None:
+        return {"tasks": tasks, "retry_counts": retry_counts}
+
+    if task["worker"] == "backend":
+        check_dir = _workspace_root / "ship" / "api"
+    elif task["worker"] == "frontend":
+        check_dir = _workspace_root / "ship" / "web"
+    else:
+        return {"tasks": tasks, "retry_counts": retry_counts}
+
+    if not check_dir.exists():
+        return {"tasks": tasks, "retry_counts": retry_counts}
+
+    # Run tsc --noEmit
+    try:
+        result = subprocess.run(
+            ["npx", "tsc", "--noEmit"],
+            cwd=check_dir,
+            capture_output=True,
+            timeout=60,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        # Can't verify — pass through
+        return {"tasks": tasks, "retry_counts": retry_counts}
+
+    if result.returncode == 0:
+        # Build passes — no changes needed
+        return {"tasks": tasks, "retry_counts": retry_counts}
+
+    # Build failed — retry if under limit
+    task_retries = retry_counts.get(str(index), 0)
+    if task_retries >= 2:
+        # Max retries exhausted — mark result with warning
+        tasks[index] = {
+            **task,
+            "result": task["result"] + "\n\n⚠️ Build verification failed after 2 retries.",
+        }
+        return {"tasks": tasks, "retry_counts": retry_counts}
+
+    # Set task back to pending with compiler error
+    error_output = result.stderr.decode()[:500]
+    tasks[index] = {
+        **task,
+        "status": "pending",
+        "result": "",
+        "description": (
+            task["description"]
+            + f"\n\n## BUILD FAILED — FIX THIS ERROR:\n```\n{error_output}\n```\n"
+            "Read the error carefully and fix the generated code."
+        ),
+    }
+    retry_counts[str(index)] = task_retries + 1
+
+    return {
+        "tasks": tasks,
+        "current_task_index": index,  # Go back to retry this task
+        "retry_counts": retry_counts,
+    }
+
+
 def check_if_done(state: SupervisorState) -> str:
     """Route back to execute_next_task if tasks remain, else to validate."""
     tasks = state.get("tasks", [])
@@ -380,13 +464,15 @@ def build_supervisor_graph(llm=None, worker_llm=None):
     graph.add_node("decompose", decompose_node)
     graph.add_node("gather_context", gather_context)
     graph.add_node("execute_next_task", execute_node)
+    graph.add_node("verify_task", verify_task)
     graph.add_node("validate", validate)
 
     graph.add_edge(START, "decompose")
     graph.add_edge("decompose", "gather_context")
     graph.add_edge("gather_context", "execute_next_task")
+    graph.add_edge("execute_next_task", "verify_task")
     graph.add_conditional_edges(
-        "execute_next_task",
+        "verify_task",
         check_if_done,
         {"execute_next_task": "execute_next_task", "validate": "validate"},
     )

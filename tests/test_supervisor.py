@@ -13,6 +13,7 @@ from shipyard.supervisor import (
     gather_context,
     parse_task_plan,
     validate,
+    verify_task,
 )
 
 
@@ -307,6 +308,52 @@ class TestGatherContext:
 # ---------------------------------------------------------------------------
 # extract_contract (pure function)
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# verify_task node
+# ---------------------------------------------------------------------------
+
+class TestVerifyTask:
+    def test_passes_through_database_worker(self):
+        """Database tasks skip verification (no tsc)."""
+        state = {
+            "tasks": [
+                {"worker": "database", "description": "Create migration", "status": "done", "result": "Created."},
+            ],
+            "current_task_index": 1,
+            "codebase_patterns": "",
+            "retry_counts": {},
+        }
+        result = verify_task(state)
+        # Should not change anything
+        assert result["tasks"][0]["status"] == "done"
+
+    def test_passes_through_shared_worker(self):
+        """Shared tasks skip verification."""
+        state = {
+            "tasks": [
+                {"worker": "shared", "description": "Create types", "status": "done", "result": "Done."},
+            ],
+            "current_task_index": 1,
+            "codebase_patterns": "",
+            "retry_counts": {},
+        }
+        result = verify_task(state)
+        assert result["tasks"][0]["status"] == "done"
+
+    def test_passes_failed_tasks_through(self):
+        """Already-failed tasks skip verification."""
+        state = {
+            "tasks": [
+                {"worker": "backend", "description": "Create route", "status": "failed", "result": "Error."},
+            ],
+            "current_task_index": 1,
+            "codebase_patterns": "",
+            "retry_counts": {},
+        }
+        result = verify_task(state)
+        assert result["tasks"][0]["status"] == "failed"
+
 
 class TestExtractContract:
     def test_extracts_status_list(self):

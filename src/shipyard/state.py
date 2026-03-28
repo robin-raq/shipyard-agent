@@ -58,3 +58,4 @@ class SupervisorState(TypedDict):
     rules: str
     trace_steps: list
     codebase_patterns: str
+    retry_counts: dict
