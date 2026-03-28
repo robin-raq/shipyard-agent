@@ -16,7 +16,8 @@ interface Entity {
   id: string;
   title?: string;
   name?: string;
-  content: string;
+  content?: string;
+  description?: string;
   type?: string;
   status?: string;
   priority?: string;
@@ -61,12 +62,14 @@ const API_MAP = {
     update: updateShip,
     delete: deleteShip,
     titleField: 'name',
+    contentField: 'description',
   },
   programs: {
     get: getProgram,
     update: updateProgram,
     delete: deleteProgram,
     titleField: 'name',
+    contentField: 'description',
   },
 };
 
@@ -142,6 +145,8 @@ export default function DocumentDetailPage() {
 
   const displayTitle = entity.title || entity.name || 'Untitled';
   const titleField = api.titleField;
+  const contentField = (api as any).contentField || 'content';
+  const displayContent = (entity as any)[contentField] || '';
 
   return (
     <main className="p-8 max-w-4xl">
@@ -170,13 +175,13 @@ export default function DocumentDetailPage() {
             </header>
             {titleField === 'name' ? (
               <TeamEditForm
-                onSubmit={handleUpdate}
-                initialValues={{ name: entity.name || '', content: entity.content }}
+                onSubmit={(data) => handleUpdate(contentField === 'description' ? { name: data.name, description: data.content } as any : data)}
+                initialValues={{ name: entity.name || '', content: displayContent }}
               />
             ) : (
               <DocumentForm
                 onSubmit={handleUpdate}
-                initialValues={{ title: entity.title || '', content: entity.content }}
+                initialValues={{ title: entity.title || '', content: displayContent }}
               />
             )}
           </section>
@@ -224,7 +229,7 @@ export default function DocumentDetailPage() {
 
             <div className="prose max-w-none">
               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <pre className="whitespace-pre-wrap font-sans text-gray-800">{entity.content}</pre>
+                <pre className="whitespace-pre-wrap font-sans text-gray-800">{displayContent}</pre>
               </div>
             </div>
           </section>
