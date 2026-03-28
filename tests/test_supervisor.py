@@ -11,6 +11,7 @@ from shipyard.supervisor import (
     execute_next_task,
     extract_contract,
     gather_context,
+    generate_shared_contract,
     parse_task_plan,
     validate,
     verify_task,
@@ -361,6 +362,163 @@ class TestGatherContext:
         result = gather_context(state)
         assert result["codebase_patterns"] == ""
 
+    def test_shows_full_exemplar_not_truncated(self, tmp_path):
+        """Exemplars should show up to 200 lines, not just 30."""
+        route_dir = tmp_path / "ship" / "api" / "src" / "routes"
+        route_dir.mkdir(parents=True)
+        # Create a 50-line file — all lines should appear
+        lines = [f"// line {i}" for i in range(50)]
+        (route_dir / "teams.ts").write_text("\n".join(lines))
+
+        state = {
+            "tasks": [{"worker": "backend", "description": "Create a route", "status": "pending", "result": ""}],
+            "current_task_index": 0,
+            "codebase_patterns": "",
+        }
+        from shipyard.tools import set_workspace
+        set_workspace(tmp_path)
+        result = gather_context(state)
+        assert "line 49" in result["codebase_patterns"]
+
+    def test_dynamic_exemplar_picks_best_match(self, tmp_path):
+        """When task mentions 'auth', picks auth-related file over teams.ts."""
+        route_dir = tmp_path / "ship" / "api" / "src" / "routes"
+        route_dir.mkdir(parents=True)
+        (route_dir / "teams.ts").write_text("export function createTeamsRouter() {}")
+        (route_dir / "auth.ts").write_text("export function createAuthRouter() { session token middleware }")
+
+        state = {
+            "tasks": [{"worker": "backend", "description": "Create auth route middleware for session tokens", "status": "pending", "result": ""}],
+            "current_task_index": 0,
+            "codebase_patterns": "",
+        }
+        from shipyard.tools import set_workspace
+        set_workspace(tmp_path)
+        result = gather_context(state)
+        # Should pick auth.ts because it has more keyword overlap
+        assert "createAuthRouter" in result["codebase_patterns"]
+
+    def test_includes_route_inventory(self, tmp_path):
+        """gather_context should list existing route filenames."""
+        route_dir = tmp_path / "ship" / "api" / "src" / "routes"
+        route_dir.mkdir(parents=True)
+        (route_dir / "teams.ts").write_text("export function createTeamsRouter() {}")
+        (route_dir / "issues.ts").write_text("export function createIssuesRouter() {}")
+        (route_dir / "auth.ts").write_text("export function createAuthRouter() {}")
+
+        state = {
+            "tasks": [{"worker": "backend", "description": "Create a new route", "status": "pending", "result": ""}],
+            "current_task_index": 0,
+            "codebase_patterns": "",
+        }
+        from shipyard.tools import set_workspace
+        set_workspace(tmp_path)
+        result = gather_context(state)
+        patterns = result["codebase_patterns"]
+        assert "Existing Routes" in patterns
+        assert "teams" in patterns
+        assert "issues" in patterns
+        assert "auth" in patterns
+
+    def test_includes_api_client_for_frontend_tasks(self, tmp_path):
+        """Frontend tasks should get API client patterns."""
+        client_dir = tmp_path / "ship" / "web" / "src" / "api"
+        client_dir.mkdir(parents=True)
+        (client_dir / "client.ts").write_text(
+            "export async function fetchIssues() { return authFetch('/api/issues'); }\n"
+            "export async function createIssue(data: Issue) { return authFetch('/api/issues', {method:'POST'}); }\n"
+        )
+        # Also need a page dir so the page keyword triggers
+        pages_dir = tmp_path / "ship" / "web" / "src" / "pages"
+        pages_dir.mkdir(parents=True)
+        (pages_dir / "IssuesPage.tsx").write_text("export default function IssuesPage() { return <div/>; }")
+
+        state = {
+            "tasks": [{"worker": "frontend", "description": "Create a new page for standups", "status": "pending", "result": ""}],
+            "current_task_index": 0,
+            "codebase_patterns": "",
+        }
+        from shipyard.tools import set_workspace
+        set_workspace(tmp_path)
+        result = gather_context(state)
+        assert "API Client Pattern" in result["codebase_patterns"]
+        assert "authFetch" in result["codebase_patterns"]
+
+
+# ---------------------------------------------------------------------------
+# generate_shared_contract (LLM node)
+# ---------------------------------------------------------------------------
+
+class TestGenerateSharedContract:
+    def test_generates_contract_from_tasks(self):
+        """LLM generates a shared contract from the task plan."""
+        mock_llm = _mock_llm(
+            AIMessage(content="```typescript\n// SHARED CONTRACT\ninterface Standup { yesterday: string; today: string; blockers: string; }\n```")
+        )
+        state = {
+            "messages": [HumanMessage(content="Create standups with fields yesterday, today, blockers")],
+            "tasks": [
+                {"worker": "database", "description": "Create standups migration", "status": "pending", "result": ""},
+                {"worker": "backend", "description": "Create standups route", "status": "pending", "result": ""},
+            ],
+            "current_task_index": 0,
+            "shared_contract": "",
+        }
+        result = generate_shared_contract(state, mock_llm)
+        assert "yesterday" in result["shared_contract"]
+        assert "today" in result["shared_contract"]
+        assert "blockers" in result["shared_contract"]
+
+    def test_returns_empty_when_no_tasks(self):
+        """Returns empty contract when there are no tasks."""
+        mock_llm = _mock_llm()
+        state = {
+            "messages": [HumanMessage(content="Do something")],
+            "tasks": [],
+            "current_task_index": 0,
+            "shared_contract": "",
+        }
+        result = generate_shared_contract(state, mock_llm)
+        assert result["shared_contract"] == ""
+
+    def test_returns_empty_when_no_user_instruction(self):
+        """Returns empty contract when there's no HumanMessage."""
+        mock_llm = _mock_llm()
+        state = {
+            "messages": [],
+            "tasks": [
+                {"worker": "backend", "description": "Do something", "status": "pending", "result": ""},
+            ],
+            "current_task_index": 0,
+            "shared_contract": "",
+        }
+        result = generate_shared_contract(state, mock_llm)
+        assert result["shared_contract"] == ""
+
+    def test_contract_injected_into_worker_context(self):
+        """Shared contract should appear in worker context during execute_next_task."""
+        mock_worker_graph = MagicMock()
+        mock_worker_graph.invoke.return_value = {
+            "messages": [AIMessage(content="Done.")],
+            "trace_steps": [],
+        }
+        state = {
+            "messages": [HumanMessage(content="Build standups")],
+            "tasks": [
+                {"worker": "backend", "description": "Create standups route", "status": "pending", "result": ""},
+            ],
+            "current_task_index": 0,
+            "codebase_patterns": "",
+            "shared_contract": "interface Standup { yesterday: string; }",
+            "project_state": "",
+            "retry_counts": {},
+            "token_usage": {},
+        }
+        result = execute_next_task(state, {"backend": mock_worker_graph})
+        # The shared contract should have been injected into the worker's context
+        call_args = mock_worker_graph.invoke.call_args[0][0]
+        assert "yesterday" in call_args["context"]
+
 
 # ---------------------------------------------------------------------------
 # extract_contract (pure function)
@@ -410,6 +568,102 @@ class TestVerifyTask:
         }
         result = verify_task(state)
         assert result["tasks"][0]["status"] == "failed"
+
+    @patch("shipyard.supervisor.subprocess.run")
+    def test_runs_vitest_after_tsc_passes(self, mock_run, tmp_path):
+        """When tsc passes, vitest should also run."""
+        from shipyard.tools import set_workspace
+        api_dir = tmp_path / "ship" / "api"
+        api_dir.mkdir(parents=True)
+        set_workspace(tmp_path)
+
+        # tsc passes (returncode 0), then vitest passes (returncode 0)
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stderr=b"", stdout=b""),  # tsc
+            MagicMock(returncode=0, stderr=b"", stdout=b"Tests passed"),  # vitest
+        ]
+
+        state = {
+            "tasks": [
+                {"worker": "backend", "description": "Create route", "status": "done", "result": "Done."},
+            ],
+            "current_task_index": 1,
+            "retry_counts": {},
+        }
+        result = verify_task(state)
+        assert result["tasks"][0]["status"] == "done"
+        assert mock_run.call_count == 2  # tsc + vitest
+
+    @patch("shipyard.supervisor.subprocess.run")
+    def test_retries_on_vitest_failure(self, mock_run, tmp_path):
+        """When tsc passes but vitest fails, task should be retried."""
+        from shipyard.tools import set_workspace
+        api_dir = tmp_path / "ship" / "api"
+        api_dir.mkdir(parents=True)
+        set_workspace(tmp_path)
+
+        # tsc passes, vitest fails
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stderr=b"", stdout=b""),  # tsc
+            MagicMock(returncode=1, stderr=b"FAIL src/routes/standups.test.ts\nExpected 200, got 404", stdout=b""),  # vitest
+        ]
+
+        state = {
+            "tasks": [
+                {"worker": "backend", "description": "Create route", "status": "done", "result": "Done."},
+            ],
+            "current_task_index": 1,
+            "retry_counts": {},
+        }
+        result = verify_task(state)
+        # Task should be set back to pending for retry
+        assert result["tasks"][0]["status"] == "pending"
+        assert "FAIL" in result["tasks"][0]["description"]
+
+
+class TestCrossBoundaryCheck:
+    def test_detects_unregistered_route(self, tmp_path):
+        """Warns when frontend calls a route not registered in app.ts."""
+        from shipyard.supervisor import _check_cross_boundary_consistency
+
+        api_dir = tmp_path / "ship" / "api" / "src"
+        api_dir.mkdir(parents=True)
+        (api_dir / "app.ts").write_text('app.use("/api/issues", issuesRouter);\napp.use("/api/teams", teamsRouter);')
+
+        client_dir = tmp_path / "ship" / "web" / "src" / "api"
+        client_dir.mkdir(parents=True)
+        (client_dir / "client.ts").write_text(
+            'export async function fetchIssues() { return authFetch("/api/issues"); }\n'
+            'export async function fetchStandups() { return authFetch("/api/standups"); }\n'
+        )
+
+        warnings = _check_cross_boundary_consistency(tmp_path)
+        assert any("standups" in w.lower() for w in warnings)
+        assert not any("issues" in w.lower() for w in warnings)
+
+    def test_no_warnings_when_consistent(self, tmp_path):
+        """No warnings when all frontend calls match backend registrations."""
+        from shipyard.supervisor import _check_cross_boundary_consistency
+
+        api_dir = tmp_path / "ship" / "api" / "src"
+        api_dir.mkdir(parents=True)
+        (api_dir / "app.ts").write_text('app.use("/api/issues", issuesRouter);')
+
+        client_dir = tmp_path / "ship" / "web" / "src" / "api"
+        client_dir.mkdir(parents=True)
+        (client_dir / "client.ts").write_text(
+            'export async function fetchIssues() { return authFetch("/api/issues"); }\n'
+        )
+
+        warnings = _check_cross_boundary_consistency(tmp_path)
+        assert warnings == []
+
+    def test_returns_empty_when_files_missing(self, tmp_path):
+        """Returns empty list if app.ts or client.ts don't exist."""
+        from shipyard.supervisor import _check_cross_boundary_consistency
+
+        warnings = _check_cross_boundary_consistency(tmp_path)
+        assert warnings == []
 
 
 class TestExtractContract:

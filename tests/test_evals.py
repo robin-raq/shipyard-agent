@@ -157,7 +157,7 @@ class TestReport:
 class TestNewExpectationTypes:
     def test_command_succeeds_passes(self, tmp_path):
         (tmp_path / "hello.py").write_text("print('hello')")
-        exp = Expectation(type="command_succeeds", value="python hello.py")
+        exp = Expectation(type="command_succeeds", value="python3 hello.py")
         result = check_expectation(exp, tmp_path, [])
         assert result.passed
 

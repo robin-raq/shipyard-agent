@@ -11,6 +11,7 @@ Graph shape:
 import json
 import os
 import re
+import subprocess
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
@@ -115,6 +116,82 @@ def parse_task_plan(llm_output: str) -> list[dict]:
     return tasks
 
 
+CONTRACT_GENERATION_PROMPT = """\
+You are generating a shared interface contract for a multi-worker coding project.
+Given the user's instruction and the task plan, produce a contract that ALL workers
+must follow exactly.
+
+## User instruction:
+{instruction}
+
+## Task plan:
+{task_json}
+
+## Output format — return ONLY a typescript code block:
+
+```typescript
+// === SHARED CONTRACT (ALL WORKERS MUST MATCH EXACTLY) ===
+
+// 1. Enum values / constants
+// List every enum, status set, or constant mentioned or implied
+
+// 2. Field names / database columns
+// Exact field names for each entity (snake_case for DB, camelCase for TS)
+
+// 3. API endpoints
+// Method, path, request body shape, response shape
+
+// 4. Function signatures
+// Export patterns each worker must use
+
+// 5. TypeScript interfaces
+// Request/response types that cross boundaries
+```
+
+## Rules:
+- Extract EVERY specific value from the user instruction (enum members, field names, etc.)
+- If the user specifies 7 statuses, list all 7. Do not substitute defaults.
+- For field names, show both the SQL column name and the TypeScript property name.
+- Include frontend API client function signatures so frontend knows how to call backend.
+- Be exhaustive. Missing a single field name causes cross-boundary failures.
+- Return ONLY the typescript code block. No explanation.
+"""
+
+
+def generate_shared_contract(state: SupervisorState, llm) -> dict:
+    """Generate a shared interface contract from the task plan using an LLM.
+
+    Synthesizes across all tasks to produce a canonical contract that
+    every worker receives, preventing cross-boundary field name mismatches.
+    """
+    tasks = state.get("tasks", [])
+
+    user_instruction = ""
+    for msg in state["messages"]:
+        if isinstance(msg, HumanMessage):
+            user_instruction = msg.content
+            break
+
+    if not tasks or not user_instruction:
+        return {"shared_contract": ""}
+
+    task_json = json.dumps(
+        [{"worker": t["worker"], "description": t["description"]} for t in tasks],
+        indent=2,
+    )
+
+    prompt = CONTRACT_GENERATION_PROMPT.format(
+        instruction=user_instruction,
+        task_json=task_json,
+    )
+
+    try:
+        response = llm.invoke([SystemMessage(content=prompt)])
+        return {"shared_contract": response.content}
+    except Exception:
+        return {"shared_contract": ""}
+
+
 PLAN_VALIDATION_PROMPT = """\
 You are a quality gate. Compare the original user instruction against the \
 proposed task plan. Your job is to REMOVE any tasks that the user did NOT \
@@ -141,11 +218,54 @@ Return ONLY a ```json``` code block.
 """
 
 
+MAX_EXEMPLAR_LINES = 200
+
+
+def _find_best_exemplar(
+    directory: "Path", glob_pattern: str, task_text: str, max_candidates: int = 15
+) -> "Path | None":
+    """Find the exemplar file most relevant to the task descriptions.
+
+    Scores files by keyword overlap with task text.
+    Falls back to the first file alphabetically if no good match.
+    """
+    from pathlib import Path
+
+    candidates = sorted(directory.glob(glob_pattern))[:max_candidates]
+    if not candidates:
+        return None
+
+    task_words = set(task_text.lower().split())
+    best_score = -1
+    best_file = None
+
+    for f in candidates:
+        if not f.is_file():
+            continue
+        try:
+            content_words = set(f.read_text(errors="replace").lower().split())
+            score = len(task_words & content_words)
+            if score > best_score:
+                best_score = score
+                best_file = f
+        except (OSError, UnicodeDecodeError):
+            continue
+
+    return best_file or (candidates[0] if candidates else None)
+
+
+def _read_exemplar(path: "Path", max_lines: int = MAX_EXEMPLAR_LINES) -> str:
+    """Read up to max_lines from a file."""
+    content = path.read_text(errors="replace")
+    return "\n".join(content.splitlines()[:max_lines])
+
+
 def gather_context(state: SupervisorState) -> dict:
     """Read exemplar files from workspace to inject codebase patterns into worker context.
 
     Scans task descriptions for keywords (route, migration, component, page)
-    and reads one exemplar file of each type. No LLM call — purely deterministic.
+    and reads the most relevant exemplar file of each type. Also builds an
+    inventory of existing routes, migrations, and pages. No LLM call.
     """
     from shipyard.tools import _workspace_root
 
@@ -157,46 +277,43 @@ def gather_context(state: SupervisorState) -> dict:
 
     patterns_parts = []
 
-    # Route exemplar
+    # Route exemplar + inventory
     if any(kw in all_descriptions for kw in ["route", "router", "endpoint", "api"]):
         route_dir = _workspace_root / "ship" / "api" / "src" / "routes"
         if route_dir.exists():
-            # Prefer teams.ts as cleanest example, fall back to any .ts file
-            exemplar = route_dir / "teams.ts"
-            if not exemplar.exists():
-                ts_files = sorted(route_dir.glob("*.ts"))
-                exemplar = ts_files[0] if ts_files else None
-            if exemplar and exemplar.exists():
-                content = exemplar.read_text()
-                # Extract first 30 lines (enough for pattern)
-                preview = "\n".join(content.splitlines()[:30])
+            exemplar = _find_best_exemplar(route_dir, "*.ts", all_descriptions)
+            if exemplar:
+                preview = _read_exemplar(exemplar)
                 patterns_parts.append(
                     f"### Route Pattern (from {exemplar.name})\n```typescript\n{preview}\n```"
                 )
+            # Inventory of existing routes
+            existing = [f.stem for f in sorted(route_dir.glob("*.ts"))]
+            if existing:
+                patterns_parts.append(f"### Existing Routes: {', '.join(existing)}")
 
-    # Migration exemplar
+    # Migration exemplar + inventory
     if any(kw in all_descriptions for kw in ["migration", "table", "schema", "database"]):
         mig_dir = _workspace_root / "ship" / "api" / "src" / "db" / "migrations"
         if mig_dir.exists():
             sql_files = sorted(mig_dir.glob("*.sql"))
             if sql_files:
                 exemplar = sql_files[-1]  # Latest migration
-                content = exemplar.read_text()
+                content = exemplar.read_text(errors="replace")
                 patterns_parts.append(
                     f"### Migration Pattern (from {exemplar.name})\n```sql\n{content}\n```"
                 )
+            existing = [f.name for f in sql_files]
+            if existing:
+                patterns_parts.append(f"### Existing Migrations: {', '.join(existing)}")
 
     # Component exemplar
     if any(kw in all_descriptions for kw in ["component", "form", "banner", "card"]):
         comp_dir = _workspace_root / "ship" / "web" / "src" / "components"
         if comp_dir.exists():
-            exemplar = comp_dir / "DocumentForm.tsx"
-            if not exemplar.exists():
-                tsx_files = sorted(comp_dir.glob("*.tsx"))
-                exemplar = tsx_files[0] if tsx_files else None
-            if exemplar and exemplar.exists():
-                content = exemplar.read_text()
-                preview = "\n".join(content.splitlines()[:30])
+            exemplar = _find_best_exemplar(comp_dir, "*.tsx", all_descriptions)
+            if exemplar:
+                preview = _read_exemplar(exemplar)
                 patterns_parts.append(
                     f"### Component Pattern (from {exemplar.name})\n```tsx\n{preview}\n```"
                 )
@@ -205,25 +322,37 @@ def gather_context(state: SupervisorState) -> dict:
     if any(kw in all_descriptions for kw in ["page", "view"]):
         pages_dir = _workspace_root / "ship" / "web" / "src" / "pages"
         if pages_dir.exists():
-            exemplar = pages_dir / "IssuesPage.tsx"
-            if not exemplar.exists():
-                tsx_files = sorted(pages_dir.glob("*.tsx"))
-                exemplar = tsx_files[0] if tsx_files else None
-            if exemplar and exemplar.exists():
-                content = exemplar.read_text()
-                preview = "\n".join(content.splitlines()[:40])
+            exemplar = _find_best_exemplar(pages_dir, "*.tsx", all_descriptions)
+            if exemplar:
+                preview = _read_exemplar(exemplar)
                 patterns_parts.append(
                     f"### Page Pattern (from {exemplar.name})\n```tsx\n{preview}\n```"
                 )
 
+    # API client patterns (for frontend workers)
+    if any(kw in all_descriptions for kw in ["component", "page", "frontend", "client", "form"]):
+        client_file = _workspace_root / "ship" / "web" / "src" / "api" / "client.ts"
+        if client_file.exists():
+            content = client_file.read_text(errors="replace")
+            lines = content.splitlines()
+            preview = "\n".join(lines[-60:]) if len(lines) > 60 else content
+            patterns_parts.append(
+                f"### API Client Pattern (from client.ts)\n```typescript\n{preview}\n```"
+            )
+
     if not patterns_parts:
-        return {"codebase_patterns": ""}
+        return {"codebase_patterns": "", "project_state": ""}
 
     codebase_patterns = (
         "## Codebase Patterns (MUST follow these exactly)\n\n"
         + "\n\n".join(patterns_parts)
     )
-    return {"codebase_patterns": codebase_patterns}
+
+    # Scan project state inventory
+    from shipyard.project_state import format_project_state, scan_project_state
+    project_state_str = format_project_state(scan_project_state(_workspace_root))
+
+    return {"codebase_patterns": codebase_patterns, "project_state": project_state_str}
 
 
 def decompose(state: SupervisorState, llm) -> dict:
@@ -297,6 +426,16 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
     codebase_patterns = state.get("codebase_patterns", "")
     if codebase_patterns:
         prior_context += f"\n{codebase_patterns}\n"
+
+    # Inject shared contract (from generate_shared_contract node)
+    shared_contract = state.get("shared_contract", "")
+    if shared_contract:
+        prior_context += f"\n{shared_contract}\n"
+
+    # Inject project state inventory
+    project_state = state.get("project_state", "")
+    if project_state:
+        prior_context += f"\n{project_state}\n"
 
     # Inject previous task results
     for prev_task in tasks[:index]:
@@ -387,14 +526,46 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
     return {"tasks": tasks, "current_task_index": index + 1, "token_usage": token_usage}
 
 
-def verify_task(state: SupervisorState) -> dict:
-    """Run build verification after a task completes.
+def _retry_task(tasks, index, retry_counts, error_output, error_label):
+    """Set a task back to pending with error context for retry."""
+    task = tasks[index]
+    task_retries = retry_counts.get(str(index), 0)
 
-    For backend/frontend workers, runs TypeScript compilation check.
-    If compilation fails and retries < 2, sets task back to pending
-    with the compiler error appended so the worker can self-correct.
+    if task_retries >= 2:
+        tasks[index] = {
+            **task,
+            "result": task["result"] + f"\n\n⚠️ {error_label} failed after 2 retries.",
+        }
+        return {"tasks": tasks, "retry_counts": retry_counts}
+
+    tasks[index] = {
+        **task,
+        "status": "pending",
+        "result": "",
+        "description": (
+            task["description"]
+            + f"\n\n## {error_label} — FIX THIS ERROR:\n```\n{error_output}\n```\n"
+            "Read the error carefully and fix the generated code."
+        ),
+    }
+    retry_counts[str(index)] = task_retries + 1
+
+    return {
+        "tasks": tasks,
+        "current_task_index": index,
+        "retry_counts": retry_counts,
+    }
+
+
+def verify_task(state: SupervisorState) -> dict:
+    """Run build and test verification after a task completes.
+
+    For backend/frontend workers:
+    1. Runs TypeScript compilation check (tsc --noEmit)
+    2. If tsc passes, runs vitest to catch logic errors
+    If either fails and retries < 2, sets task back to pending
+    with the error appended so the worker can self-correct.
     """
-    import subprocess
     from shipyard.tools import _workspace_root
 
     tasks = list(state["tasks"])
@@ -424,7 +595,7 @@ def verify_task(state: SupervisorState) -> dict:
     if not check_dir.exists():
         return {"tasks": tasks, "retry_counts": retry_counts}
 
-    # Run tsc --noEmit
+    # Step 1: Run tsc --noEmit
     try:
         result = subprocess.run(
             ["npx", "tsc", "--noEmit"],
@@ -433,42 +604,64 @@ def verify_task(state: SupervisorState) -> dict:
             timeout=60,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        # Can't verify — pass through
         return {"tasks": tasks, "retry_counts": retry_counts}
 
-    if result.returncode == 0:
-        # Build passes — no changes needed
+    if result.returncode != 0:
+        error_output = result.stderr.decode()[:1000]
+        return _retry_task(tasks, index, retry_counts, error_output, "BUILD FAILED")
+
+    # Step 2: Run vitest (only if tsc passed)
+    try:
+        test_result = subprocess.run(
+            ["npx", "vitest", "run", "--reporter=verbose", "--bail", "--passWithNoTests"],
+            cwd=check_dir,
+            capture_output=True,
+            timeout=120,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        # Can't run tests — pass through (tsc already passed)
         return {"tasks": tasks, "retry_counts": retry_counts}
 
-    # Build failed — retry if under limit
-    task_retries = retry_counts.get(str(index), 0)
-    if task_retries >= 2:
-        # Max retries exhausted — mark result with warning
-        tasks[index] = {
-            **task,
-            "result": task["result"] + "\n\n⚠️ Build verification failed after 2 retries.",
-        }
-        return {"tasks": tasks, "retry_counts": retry_counts}
+    if test_result.returncode != 0:
+        error_output = test_result.stderr.decode()[:1000]
+        if not error_output:
+            error_output = test_result.stdout.decode()[:1000]
+        return _retry_task(tasks, index, retry_counts, error_output, "TESTS FAILED")
 
-    # Set task back to pending with compiler error
-    error_output = result.stderr.decode()[:500]
-    tasks[index] = {
-        **task,
-        "status": "pending",
-        "result": "",
-        "description": (
-            task["description"]
-            + f"\n\n## BUILD FAILED — FIX THIS ERROR:\n```\n{error_output}\n```\n"
-            "Read the error carefully and fix the generated code."
-        ),
-    }
-    retry_counts[str(index)] = task_retries + 1
+    # Both tsc and vitest passed
+    return {"tasks": tasks, "retry_counts": retry_counts}
 
-    return {
-        "tasks": tasks,
-        "current_task_index": index,  # Go back to retry this task
-        "retry_counts": retry_counts,
-    }
+
+def _check_cross_boundary_consistency(workspace_root) -> list[str]:
+    """Check that frontend API calls match backend route registrations.
+
+    Returns a list of warning strings (empty if consistent).
+    """
+    from pathlib import Path
+
+    warnings = []
+    app_file = Path(workspace_root) / "ship" / "api" / "src" / "app.ts"
+    if not app_file.exists():
+        return warnings
+
+    app_content = app_file.read_text(errors="replace")
+    registered_paths = set(re.findall(r'app\.use\("(/api/[^"]+)"', app_content))
+
+    client_file = Path(workspace_root) / "ship" / "web" / "src" / "api" / "client.ts"
+    if not client_file.exists():
+        return warnings
+
+    client_content = client_file.read_text(errors="replace")
+    called_paths = set()
+    for match in re.findall(r'(?:fetch|authFetch)\([`"\'](/api/[^`"\'?]+)', client_content):
+        base = "/" + "/".join(match.strip("/").split("/")[:2])
+        called_paths.add(base)
+
+    for path in sorted(called_paths):
+        if path not in registered_paths:
+            warnings.append(f"Frontend calls {path} but no backend route registered in app.ts")
+
+    return warnings
 
 
 def check_if_done(state: SupervisorState) -> str:
@@ -480,14 +673,40 @@ def check_if_done(state: SupervisorState) -> str:
 
 
 def validate(state: SupervisorState) -> dict:
-    """Summarize all task results into a final response message."""
+    """Summarize all task results and run final integration checks."""
+    from shipyard.tools import _workspace_root
+
     lines = ["## Task Results\n"]
     for i, task in enumerate(state["tasks"], 1):
         status_icon = "done" if task["status"] == "done" else "FAILED"
         lines.append(f"**{i}. [{status_icon}] {task['worker']}:** {task['description']}")
         if task["result"]:
-            lines.append(f"   → {task['result']}")
+            lines.append(f"   -> {task['result']}")
         lines.append("")
+
+    # Final integration checks
+    if _workspace_root:
+        # Final build check on both API and web
+        for subdir in ["ship/api", "ship/web"]:
+            check_dir = _workspace_root / subdir
+            if check_dir.exists():
+                try:
+                    result = subprocess.run(
+                        ["npx", "tsc", "--noEmit"],
+                        cwd=check_dir,
+                        capture_output=True,
+                        timeout=60,
+                    )
+                    if result.returncode != 0:
+                        error = result.stderr.decode()[:300]
+                        lines.append(f"**WARNING: {subdir} build failed:**\n```\n{error}\n```")
+                except (subprocess.TimeoutExpired, FileNotFoundError):
+                    pass
+
+        # Cross-boundary consistency check
+        warnings = _check_cross_boundary_consistency(_workspace_root)
+        for w in warnings:
+            lines.append(f"**WARNING:** {w}")
 
     summary = "\n".join(lines)
     return {"messages": [AIMessage(content=summary)]}
@@ -526,18 +745,23 @@ def build_supervisor_graph(llm=None, worker_llm=None):
     def decompose_node(state: SupervisorState) -> dict:
         return decompose(state, supervisor_llm)
 
+    def contract_node(state: SupervisorState) -> dict:
+        return generate_shared_contract(state, supervisor_llm)
+
     def execute_node(state: SupervisorState) -> dict:
         return execute_next_task(state, worker_graphs)
 
     graph = StateGraph(SupervisorState)
     graph.add_node("decompose", decompose_node)
+    graph.add_node("generate_shared_contract", contract_node)
     graph.add_node("gather_context", gather_context)
     graph.add_node("execute_next_task", execute_node)
     graph.add_node("verify_task", verify_task)
     graph.add_node("validate", validate)
 
     graph.add_edge(START, "decompose")
-    graph.add_edge("decompose", "gather_context")
+    graph.add_edge("decompose", "generate_shared_contract")
+    graph.add_edge("generate_shared_contract", "gather_context")
     graph.add_edge("gather_context", "execute_next_task")
     graph.add_edge("execute_next_task", "verify_task")
     graph.add_conditional_edges(

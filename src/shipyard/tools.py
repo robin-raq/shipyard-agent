@@ -7,6 +7,7 @@ All file tools enforce a workspace sandbox — paths that resolve outside
 the workspace root are rejected.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -455,7 +456,63 @@ def scan_workspace(max_depth: int = 4) -> str:
 
 
 # ---------------------------------------------------------------------------
+# browser_check
+# ---------------------------------------------------------------------------
+
+@tool
+def browser_check(url: str, checks: str = "status,title") -> str:
+    """Launch a headless browser, navigate to a URL, and verify the page.
+
+    Requires Playwright to be installed (npx playwright install chromium).
+    Falls back gracefully if Playwright is unavailable.
+
+    Args:
+        url: The URL to check (e.g., 'http://localhost:3001/api/health').
+        checks: Comma-separated checks to perform. Options:
+                'status' — HTTP status code
+                'title' — page title
+                'content' — visible text content (first 2000 chars)
+                'elements:<selector>' — count elements matching CSS selector
+
+    Returns:
+        Check results as formatted text, or error message.
+    """
+    script_path = _workspace_root / "ship" / "scripts" / "browser-check.js"
+    if not script_path.exists():
+        return "Error: browser-check.js not found. Browser checks not available."
+
+    try:
+        result = subprocess.run(
+            ["node", str(script_path), url, checks],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(_workspace_root / "ship"),
+        )
+    except subprocess.TimeoutExpired:
+        return f"Error: Browser check timed out after 30 seconds for {url}"
+    except FileNotFoundError:
+        return "Error: Node.js not found. Browser checks not available."
+
+    output = result.stdout.strip()
+    if not output:
+        return f"Error: No output from browser check. stderr: {result.stderr[:500]}"
+
+    try:
+        data = json.loads(output)
+        if "error" in data:
+            return f"Browser check error: {data['error']}"
+
+        lines = [f"Browser check for {url}:"]
+        for key, value in data.items():
+            lines.append(f"  {key}: {value}")
+        return "\n".join(lines)
+    except json.JSONDecodeError:
+        return f"Browser check output: {output[:500]}"
+
+
+# ---------------------------------------------------------------------------
 # Tool registry (for agent.py to import)
 # ---------------------------------------------------------------------------
 
-ALL_TOOLS = [read_file, create_file, list_files, edit_file, run_command, search_files, scan_workspace]
+ALL_TOOLS = [read_file, create_file, list_files, edit_file, run_command, search_files, scan_workspace, browser_check]

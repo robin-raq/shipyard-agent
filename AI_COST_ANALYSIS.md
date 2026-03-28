@@ -9,7 +9,7 @@
 | Input tokens | 1,387,432 |
 | Output tokens | 10,340 |
 | Total tokens | 1,397,772 |
-| Total traced runs | 174+ |
+| Total traced runs | 214+ |
 | Runs sampled for cost | 100 |
 
 ### Cost Breakdown by Model
@@ -31,7 +31,8 @@ Note: The $4.32 figure from LangSmith applies Sonnet pricing to all runs. Actual
 | Ship Scaffold | Mar 25 | ~20 | ~$0.60 | Initial monorepo, CRUD, Docker |
 | Ship Features | Mar 26 | ~80 | ~$2.40 | 10 features in parallel (TDD) |
 | Bug Fixes/Deploy | Mar 26–27 | ~29 | ~$0.70 | Fixes, hallucination guard, Railway |
-| **Total** | | **~174** | **~$5.10** | |
+| Agent Improvements | Mar 28 | ~40 | ~$1.40 | Kanban, standups, gather_context, live evals |
+| **Total** | | **~214** | **~$6.50** | |
 
 ### Infrastructure Costs
 
@@ -43,7 +44,7 @@ Note: The $4.32 figure from LangSmith applies Sonnet pricing to all runs. Actual
 | GitHub | $0.00 | Free public repo |
 | **Total infra** | **$0.00** | All within free tiers |
 
-### Total Development Cost: ~$5.10
+### Total Development Cost: ~$6.50
 
 ---
 

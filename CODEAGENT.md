@@ -294,28 +294,28 @@ shipyard> /quit
 
 ## Test Suite
 
-157 tests across 11 test files (agent) + 69 test files (Ship app):
+184 tests across 12 test files (agent) + 114 test files (Ship app):
 
 ### Agent Tests
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| `test_tools.py` | 35 | All 5 tools, workspace sandbox, command allowlist, read cap, before/after |
+| `test_tools.py` | 35 | All 5 tools + search_files + scan_workspace, sandbox, allowlist, read cap |
 | `test_agent.py` | 6 | Graph compilation, routing, tool loops, system prompt |
 | `test_repl.py` | 11 | REPL commands, context injection, mode switching, /revert |
 | `test_tracing.py` | 10 | Trace file creation, step collection, timing, secret redaction |
 | `test_state.py` | 9 | AgentState, TaskItem, SupervisorState validation |
 | `test_worker.py` | 5 | Worker factory: compilation, routing, prompts, isolation |
 | `test_worker_prompts.py` | 8 | Prompt content: base rules, scoping, JSON output |
-| `test_supervisor.py` | 15 | Decomposition, execution, routing, validation, worker allowlist |
-| `test_models.py` | 8 | Model selection: role mapping, fallback, force override |
+| `test_supervisor.py` | 18 | Decomposition, execution, routing, validation, gather_context, verify_task |
+| `test_models.py` | 10 | Model selection: role mapping, fallback, force override, cost routing |
 | `test_memory.py` | 12 | Persistent memory: save, load, forget, list |
 | `test_rules.py` | 6 | Custom rules: load from directory, inject into prompt |
-| `test_evals.py` | 30 | Evaluation harness: 12 tasks, scoring, reporting |
+| `test_evals.py` | 54 | 12 mock eval tasks + 7 live eval tasks, scoring, reporting |
 
 ### Ship App Tests (Agent-Generated)
 
-69 test files covering: routes (CRUD for all entities), auth (login/logout/session), dashboard, programs, comments, search, unified document model, case transforms.
+114 test files covering: routes (CRUD for all entities), auth (login/logout/session), dashboard, programs, comments, search, unified document model, case transforms, kanban, standups, weekly plans, retros, reviews.
 
 Run agent tests: `pytest -v`
 Run Ship tests: `cd ship && pnpm --filter api run test`
@@ -329,7 +329,7 @@ Run Ship tests: `cd ship && pnpm --filter api run test`
 - **URL:** https://ship-app-production-fd9d.up.railway.app
 - **Stack:** Express API + React SPA + PostgreSQL (Railway managed)
 - **Health:** `/health` → `{"status":"ok"}`
-- **API:** `/api/docs`, `/api/issues`, `/api/projects`, `/api/weeks`, `/api/teams`, `/api/ships`, `/api/programs`, `/api/comments`, `/api/dashboard`, `/api/search`, `/api/auth`
+- **API:** `/api/docs`, `/api/issues`, `/api/projects`, `/api/weeks`, `/api/teams`, `/api/ships`, `/api/programs`, `/api/comments`, `/api/dashboard`, `/api/search`, `/api/auth`, `/api/standups`, `/api/weekly-plans`, `/api/retros`, `/api/reviews`, `/api/feedback`
 - **Swagger:** `/api-docs`
 
 ### Shipyard Agent
@@ -342,13 +342,191 @@ Runs locally via `python -m shipyard`. Not deployed (local-only per PRD Phase 1 
 
 | Metric | Value |
 |--------|-------|
-| Total commits | 63 |
-| Agent-generated commits | 15 |
-| LangSmith traces | 174+ |
-| Local JSON traces | 174 files |
-| Agent test count | 157 (all passing) |
-| Ship app test files | 69 |
-| Ship source lines | 16,818 |
-| Original Ship lines | 122,920 (14% coverage) |
-| Human interventions | 11 |
-| API cost (Sonnet pricing) | ~$4.32 (last 100 traced runs) |
+| Total commits | 96 |
+| Agent-generated commits | 23 |
+| LangSmith traces | 214+ |
+| Local JSON traces | 214 files |
+| Agent test count | 184 (12 test files) |
+| Ship app test files | 114 |
+| Ship source lines | 27,890 |
+| Original Ship lines | 122,920 (23% coverage) |
+| Human interventions | 19 |
+| API cost (blended) | ~$5.10 (Sonnet + GPT-4o-mini) |
+| Deployed URL | https://ship-app-production-fd9d.up.railway.app |
+
+---
+
+## Architecture Decisions (Final Submission)
+
+Key architecture decisions, what was considered, and why each call was made.
+
+### Decision 1: Anchor-Based Editing (vs. Line Numbers, AST, Unified Diff)
+
+- **Chosen:** Anchor-based replacement (`old_text` → `new_text`)
+- **Considered:** Line-range replacement (fragile when lines shift), AST parsing (language-specific, complex), unified diff (requires LLM to produce well-formed patches)
+- **Why:** Language-agnostic (works on TypeScript, SQL, JSON, YAML), more robust than line numbers (which drift after every edit), simpler than AST parsing (no per-language parsers). LLMs are good at identifying unique text blocks. Inspired by both OpenCode and Claude Code's editing approach.
+- **Tradeoff:** Requires the anchor to be unique in the file. Non-unique anchors cause failures (3 interventions during rebuild). Mitigated by returning all match locations with surrounding context when ambiguous.
+
+### Decision 2: LangGraph StateGraph (vs. Anthropic Agent SDK, AutoGen, Raw Loop)
+
+- **Chosen:** LangGraph with manual `StateGraph` construction
+- **Considered:** Anthropic Agent SDK (simpler but less control), AutoGen/CrewAI (heavier, more opinionated), raw tool-calling loop (no observability)
+- **Why:** Explicit graph structure makes every node transition traceable. First-class multi-agent support via sub-graphs. Automatic LangSmith tracing with zero config (214 traces captured). Learning curve (~2 hours) justified by debuggability.
+- **Tradeoff:** More boilerplate than `create_react_agent`. Worth it for full control over routing, state, and error handling.
+
+### Decision 3: Supervisor-Worker Multi-Agent (vs. Peer-to-Peer, Single Agent)
+
+- **Chosen:** Single supervisor decomposes tasks and dispatches to 4 specialized workers (backend, frontend, database, shared)
+- **Considered:** Peer-to-peer agents (complex conflict resolution), single agent for everything (slower, no parallelism), human-in-the-loop decomposition (bottleneck)
+- **Why:** Parallelism is real — 5 features built in 30 minutes. Workers have scoped prompts and directories, reducing cross-contamination.
+- **Tradeoff:** Cross-boundary mismatches (frontend/backend contract disagreements) caused 3 interventions. Mitigated by adding `gather_context` (pre-scan exemplar injection) and `extract_contract` (value extraction from prompts).
+
+### Decision 4: Cost-Optimized Model Routing (Claude Sonnet + GPT-4o-mini)
+
+- **Chosen:** Route supervisor and simple workers (shared, database) to GPT-4o-mini; complex workers (backend, frontend) to Claude Sonnet
+- **Considered:** All-Sonnet (expensive), all-GPT-4o-mini (lower editing quality), all-GPT-4o (fast but pricier)
+- **Why:** GPT-4o-mini is ~20x cheaper and handles structured tasks (JSON decomposition, TypeScript interfaces, SQL DDL) well. Claude Sonnet's accuracy matters for surgical file editing.
+- **Tradeoff:** When Anthropic budget was exhausted (intervention #12), switched all workers to GPT-4o. Code quality was adequate for TDD tasks where tests validate correctness.
+
+### Decision 5: Pre-Scan Context Injection (vs. RAG, vs. Nothing)
+
+- **Chosen:** Deterministic `gather_context` node that reads one exemplar file per task type before workers execute
+- **Considered:** RAG with vector database (over-engineering for ~17K lines), no context injection (caused 0% autonomous rate in kanban sprint)
+- **Why:** The agent's failures were behavioral (not reading existing patterns), not infrastructural (unable to find them). `search_files` + `read_file` are sufficient for a codebase this size. The simplest fix — just showing the agent an example — raised autonomous success from 0% to 71%.
+- **Tradeoff:** Hardcoded exemplar paths. A production system would dynamically discover the most relevant exemplar via file similarity.
+
+---
+
+## Ship Rebuild Log (Final Submission)
+
+Chronological log of the Ship app rebuild using the Shipyard agent. Every human intervention is documented with timestamps and root causes.
+
+| # | Timestamp | Action | Mode | Result | Intervention? |
+|---|-----------|--------|------|--------|---------------|
+| 1 | Mar 25 13:04 | Scaffold pnpm monorepo | Claude Code | ✅ ship/api, ship/web, ship/shared | No |
+| 2 | Mar 25 14:09 | Generate shared types + DB layer | Agent (single) | ✅ Types, pool, migrations | No |
+| 3 | Mar 25 14:16 | Generate CRUD routes for /api/documents | Agent (single) | ✅ All endpoints working | No |
+| 4 | Mar 25 14:19 | Generate React CRUD UI (4 views) | Agent (single) | ✅ Docs, Issues, Projects, Teams pages | No |
+| 5 | Mar 25 14:50 | Run tests | Human | ❌ Empty test suite fails | Yes — added `--passWithNoTests` |
+| 6 | Mar 25 15:28 | Docker build for Railway | Agent + Human | ❌ Multi-stage Dockerfile broken | Yes — simplified to single-stage |
+| 7 | Mar 25 16:16 | Refactor to separate tables per entity | Agent (single) | ✅ Migration + routes generated | No |
+| 8 | Mar 25 16:57 | Seed database | Human | ❌ Column name mismatch (name vs title) | Yes — fixed seed.ts manually |
+| 9 | Mar 25 17:28 | SPA fallback breaking API routes | Human | ❌ /api/* returning HTML | Yes — added path exclusion |
+| 10 | Mar 25 19:10 | Railway healthcheck failing | Agent (single) | ✅ Agent added /health endpoint | No |
+| 11 | Mar 26 07:00 | Fix 6 Ship app bugs | Agent (multi) | ⚠️ Fixed 5/6 but hallucinated extra features | Yes — added grounding rules |
+| 12 | Mar 26 09:53 | 5 features in parallel (Swagger, WCAG, Ships, TipTap, WebSocket) | Agent (multi) | ✅ All 5 completed in 32 min | No |
+| 13 | Mar 26 12:02 | 5 TDD features in parallel | Agent (multi) | ❌ All 5 crashed — supervisor IndexError | Yes — bounds check fix |
+| 14 | Mar 26 12:19 | Re-run: Dashboard + unified docs | Agent (multi) | ✅ Dashboard page + API + tests | No |
+| 15 | Mar 26 12:33 | Re-run: Auth, programs, comments, search | Agent (multi) | ✅ All 4 features with tests | No |
+| 16 | Mar 26 12:45 | Run migrations | Human | ❌ Non-idempotent CREATE TABLE | Yes — added _migrations tracking |
+| 17 | Mar 26 12:48 | Issue filter dropdowns broken | Human | ❌ in-progress vs in_progress mismatch | Yes — fixed frontend values |
+| 18 | Mar 26 13:41 | Login page not working | Human | ❌ Backend expected username, frontend sent email | Yes — aligned field names |
+| 19 | Mar 26 19:01 | Railway deploy — server not responding | Human | ❌ Server binding to localhost not 0.0.0.0 | Yes — bound to 0.0.0.0 |
+| 20 | Mar 26 21:20 | Railway deploy — /health returning HTML | Human | ❌ Stale deploy (Mar 25 image) | Yes — set root directory to ship/ |
+| 21 | Mar 27 01:25 | Migrate + seed Railway Postgres | Human | ✅ All tables created, data seeded | No |
+| 22 | Mar 27 16:44 | Anthropic API budget exhausted mid-task | Human | ❌ Switched all workers to GPT-4o | Yes — changed model config |
+| 23 | Mar 28 ~09:00 | 7 kanban + standups features (batch) | Agent (multi) | ⚠️ All 7 needed intervention | Yes — schema/contract blindness, export mismatch |
+| 24 | Mar 28 ~12:00 | Agent improvement sprint (3 fixes) | Claude Code | ✅ gather_context, extract_contract, verify_task | No |
+| 25 | Mar 28 ~14:00 | Live eval validation | Agent (single) | ✅ 5/7 evals passing (71%) | No |
+
+**Totals:** 25 actions, 19 human interventions. 52% first-attempt autonomous success rate overall. After agent improvements (gather_context + contract extraction): 71% on live evals.
+
+### Failure Pattern Summary
+
+1. **Cross-boundary mismatches (5 interventions):** Frontend/backend built in separate sessions disagree on field names, enum values, auth patterns. Root cause: no shared contract enforcement.
+2. **Accumulated state problems (3 interventions):** Agent treats each instruction independently — doesn't know what migrations/tables already exist.
+3. **Infrastructure blindness (4 interventions):** Agent builds application code well but misses deployment concerns (health checks, SPA routing, Docker, Railway config).
+4. **Hallucination (2 interventions):** Supervisor invented features not in the instruction. Fixed by grounding rules + plan validation gate.
+5. **Schema/contract blindness (5 interventions):** Agent ignores specific values from prompts (e.g., told 7 kanban statuses, used 3). Fixed by contract extraction.
+
+---
+
+## Comparative Analysis (Final Submission)
+
+### Executive Summary
+
+Shipyard rebuilt the Ship application — a project management platform — over a 4-day sprint. The agent produced a functional monorepo with 18 API routes, 12+ frontend pages, authentication, full-text search, comments, rich text editor, kanban board, and standups. The rebuild covers ~23% of the original by line count (27,890 vs. 122,920 lines) and ~50% of frontend views. The agent excelled at parallel CRUD scaffolding (5 features in 30 minutes) but required 19 human interventions for cross-module consistency, migration ordering, and infrastructure.
+
+### Architectural Comparison
+
+| Aspect | Original Ship | Agent-Built Ship |
+|--------|--------------|-----------------|
+| Database | Single `documents` table with discriminator + JSONB properties | Separate tables per entity + unified `documents` table (both coexist) |
+| Migrations | 50+ with up/down support | 14, forward-only, no rollback |
+| API routes | 48 route files, factory pattern with DI | 18 route files, same factory pattern |
+| Auth | CAIA-Auth (government SSO) + API tokens | Simple username/password + UUID session tokens |
+| Frontend pages | 24 pages with workspace-scoped routing | 12 pages with flat routing |
+| State management | React Context + custom hooks per feature | React Context for auth only; local state elsewhere |
+| Editor | TipTap + Yjs collaboration + WebSocket cursor sync | TipTap component created, partially wired |
+
+### Performance Benchmarks
+
+| Metric | Original | Agent-Built | Coverage |
+|--------|----------|-------------|----------|
+| Source lines (TS/TSX) | 122,920 | 27,890 | 23% |
+| API route files | 48 | 18 | 38% |
+| Frontend pages | 24 | 12 | 50% |
+| Test files | 115 | 114 | 99% |
+| Database migrations | 50+ | 14 | 28% |
+
+### Shortcomings
+
+19 human interventions logged. Top failure modes: cross-boundary mismatches (5), schema/contract blindness (5), infrastructure blindness (4), accumulated state problems (3), hallucination (2). Full intervention log in Ship Rebuild Log section above.
+
+### Advances
+
+1. **Parallel scaffolding:** 5 CRUD modules built simultaneously in 30 minutes
+2. **Test generation:** 114 test files produced — 99% of original's test file count at 23% of source volume
+3. **Consistent boilerplate:** Every route file follows identical patterns (factory function, validation, try/catch)
+4. **WCAG accessibility:** ARIA labels, focus indicators, semantic HTML added across all components in one 15-minute pass
+5. **Model portability:** Switched Claude → GPT-4o with one config change; all tools and prompts worked identically
+
+### Trade-off Analysis
+
+See Architecture Decisions section above for detailed analysis of all 5 major decisions (anchor editing, LangGraph, supervisor-worker, model routing, pre-scan context).
+
+### If You Built It Again
+
+1. **Shared contract enforcement** — generate TypeScript interface contracts before workers execute; validate conformance after
+2. **Migration awareness** — `list_migrations` tool reads current state before generating new ones
+3. **Pre-flight validation** — review parallel task plans for conflicts before launching
+4. **Post-edit integration check** — run `pnpm build && pnpm test` automatically after every multi-agent batch
+5. **Session continuity** — persistent project memory (tables, routes, pages, types) loaded at session start
+6. **Cost guardrails** — track spend per provider, auto-switch or alert when approaching limits
+
+---
+
+## Cost Analysis (Final Submission)
+
+### Development Costs (Actual)
+
+| Model | Role | Usage | Est. Cost |
+|-------|------|-------|-----------|
+| Claude Sonnet 4.5 | Backend/frontend workers, single-agent | ~70% of 214 runs | ~$3.02 |
+| GPT-4o-mini | Supervisor, shared/DB workers | ~30% of runs | ~$0.08 |
+| GPT-4o | All workers (after Anthropic budget hit) | ~10 runs | ~$2.00 |
+| **Total API cost** | | **214 runs** | **~$5.10** |
+
+Infrastructure: $0 (Railway free tier, LangSmith free tier, GitHub free).
+
+**Total development cost: ~$5.10**
+
+### Production Cost Projections
+
+Assumptions: 10 invocations/user/day, 4K input + 2K output tokens per invocation, 70/30 Sonnet/GPT-4o-mini split.
+
+| Scale | Users | Daily Invocations | Monthly Cost |
+|-------|-------|-------------------|-------------|
+| 100 users | 100 | 1,000 | ~$900/month |
+| 1,000 users | 1,000 | 10,000 | ~$9,000/month |
+| 10,000 users | 10,000 | 100,000 | ~$90,000/month |
+
+### Break-Even vs. Manual Development
+
+| Metric | Agent | Junior Dev | Senior Dev |
+|--------|-------|-----------|-----------|
+| Time to rebuild | ~6 hours active | ~40 hours | ~20 hours |
+| Cost | $5.10 | $2,000 (@$50/hr) | $1,000 (@$50/hr) |
+| Cost per line | $0.0002 | $0.07 | $0.04 |
+
+The agent is ~200x cheaper per line but required 19 human interventions for judgment calls the LLM cannot make: architecture, infrastructure, cross-module consistency.

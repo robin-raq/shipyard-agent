@@ -1,7 +1,7 @@
 # PRESEARCH.md — Shipyard: Building an Autonomous Coding Agent
 
 > Completed: 2026-03-23
-> Author: [Your Name]
+> Author: Raq Dominique
 
 ---
 
