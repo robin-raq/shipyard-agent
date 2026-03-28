@@ -390,6 +390,7 @@ def run_task(task: dict, graph, trace_collector: TraceCollector) -> dict:
         "trace_steps": [],
         "tasks": [],
         "current_task_index": 0,
+        "codebase_patterns": "",
     })
 
     elapsed = time.time() - start

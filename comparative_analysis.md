@@ -25,7 +25,7 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 | Pattern | Factory functions with dependency injection (`createDocumentsRouter(pool)`) | Same factory pattern (agent correctly inferred this from existing code) |
 | Auth | CAIA-Auth (government SSO) + API tokens + session management | Simple username/password + UUID session tokens |
 | Middleware | Auth, rate limiting, audit logging, CORS, workspace scoping | Auth middleware only |
-| Missing routes | — | accountability, activity, admin, ai, api-tokens, associations, backlinks, feedback, files, invites, iterations, reports-to, setup, sprint-reviews, standups, weekly-plans, workspaces (19 routes not built) |
+| Missing routes | — | activity, admin, ai, api-tokens, associations, backlinks, feedback, files, invites, iterations, reports-to, setup, sprint-reviews, weekly-plans, workspaces (15 routes not built) |
 
 **What the agent did that a human wouldn't:** The agent generated a 1,483-line `programs.ts` route file — nearly 3x the length of the original's equivalent. It duplicated validation logic inline in every handler instead of extracting a shared validation middleware. A human would have created `validateBody(schema)` middleware after the second route.
 
@@ -36,7 +36,7 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 | State management | React Context + custom hooks per feature | React Context for auth only; local state everywhere else |
 | Editor | TipTap with Yjs collaboration, cursor tracking, WebSocket sync | TipTap component created but not wired into document pages |
 | Routing | Nested routes with workspace-scoped URLs (`/:workspace/docs/:id`) | Flat routes (`/docs`, `/issues/:id`) |
-| Missing pages | — | AdminDashboard, OrgChart, MyWeekPage, ReviewsPage, StatusOverview, WorkspaceSettings, FeedbackEditor, PersonEditor, Setup, InviteAccept, TeamMode, ConvertedDocuments, PublicFeedback |
+| Missing pages | — | OrgChart, MyWeekPage, ReviewsPage, StatusOverview, WorkspaceSettings, FeedbackEditor, PersonEditor, Setup, InviteAccept, TeamMode, ConvertedDocuments, PublicFeedback |
 
 ## 3. Performance Benchmarks
 
@@ -46,9 +46,9 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 | Source files | 409 | 64 | 16% coverage |
 | Test files | 115 | 75 | 65% coverage |
 | Test lines | 40,839 | 19,799 | 49% coverage |
-| API route files | 48 | 14 | 29% coverage |
-| Frontend pages | 24 | 11 | 46% coverage |
-| Database migrations | 50+ | 10 | 20% coverage |
+| API route files | 48 | 15 | 31% coverage |
+| Frontend pages | 24 | 12 | 50% coverage |
+| Database migrations | 50+ | 14 | 28% coverage |
 | Frontend build time | not measured (no local build available) | 7.2s (`tsc -b && vite build`) | — |
 | Frontend bundle size (JS, gzipped) | not measured | 201.78 KB (657 KB uncompressed) | Vite warns >500 KB; needs code-splitting |
 | Frontend bundle size (CSS, gzipped) | not measured | 4.37 KB (17.49 KB uncompressed) | — |
@@ -57,8 +57,8 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 | Time to build MVP agent | — | ~8 hours | — |
 | Time to build Ship (agent-driven) | — | ~6 hours active agent time | — |
 | Total commits | — | 30+ | — |
-| Human interventions | — | 12 | — |
-| Batch feature tasks completed | — | 10 of 10 (38 min total) | — |
+| Human interventions | — | 19 | — |
+| Batch feature tasks completed | — | 17 of 17 (49 min total) | — |
 
 ### Agent Speed Metrics (from git log timestamps)
 
@@ -67,6 +67,7 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 - **5 TDD features in parallel** (unified docs, auth, dashboard, programs, comments+search): ~2 hours including retries from supervisor bug
 - **Single feature average**: 8-15 minutes per CRUD module in multi-agent mode
 - **10 TDD features via batch runner** (auth RBAC, 2 contexts, API routes, API client, 3 components, test expansion): 38 minutes total. Claude Sonnet averaged 329s/task, GPT-4o averaged 60s/task (~5.5x faster).
+- **7 kanban+standups features via batch runner** (migration, @dnd-kit, 3 kanban components, page toggle, standups CRUD, form, page+nav): 636 seconds total (~10.6 min). All required manual intervention but provided useful scaffolding.
 
 ## 4. Shortcomings
 
@@ -202,6 +203,51 @@ The agent's first attempt at Task 1 (auth middleware RBAC) revealed a critical p
 **Lesson:** Autonomous agents need *exemplar-driven prompts*, not *instruction-driven prompts*. Saying "write tests" produces generic scaffolds. Saying "copy the pattern from auth.test.ts using vitest + supertest + testPool" produces runnable tests. The agent is a pattern replicator, not a pattern inventor.
 
 This matches intervention #11 from the original rebuild — when the auth frontend and backend were built by different agent sessions with no shared reference, they disagreed on the contract. The fix is the same: give every agent session an explicit exemplar to copy from.
+
+### Kanban + Standups Feature Sprint (2026-03-28)
+
+Added two major features from the original Ship app via the Shipyard agent's batch runner (`run_kanban_standups.py`): a 7-column Kanban board for issues and a daily Standups system.
+
+**7 tasks executed, ~636 seconds total agent time:**
+
+| Task | Duration | Agent Result | Interventions Needed |
+|------|----------|-------------|---------------------|
+| 1. Kanban migration + issues route | 36.9s | Created migration + PATCH endpoint | Wrong statuses (used "review"/"blocked" instead of kanban 7). Wrong migration SQL (ADD COLUMN instead of ALTER CONSTRAINT). Fixed migration and VALID_STATUSES manually. |
+| 2. Install @dnd-kit + client API | 17.4s | Client function added | pnpm install failed (workspace resolution). Installed @dnd-kit manually. |
+| 3. KanbanBoard components | 29.2s | 3 components created | Used wrong column names ("To Do"/"In Progress"/"Done" instead of 7 kanban statuses). Full rewrite of KanbanBoard, KanbanColumn, KanbanCard. |
+| 4. IssuesPage view toggle | 45.3s | Toggle added, JSX broken | Mismatched ternary nesting caused TS1005 syntax error. Old statuses in filter dropdown. Fixed JSX structure and status values. |
+| 5. Standups migration + route | 35.8s | Files created | Migration used SERIAL instead of UUID, `date` instead of `standup_date`, no UNIQUE constraint, no soft delete. Route created its own Pool() instead of accepting parameter, no GET /status endpoint, hard deletes. Full rewrite of both files. |
+| 6. Standups client + form | 39.8s | Functions and form created | Client used wrong shape ({title, content} instead of {yesterday, today, blockers}). Form had 2 fields instead of 3. Rewrote both. |
+| 7. StandupsPage + nav | 432.4s | Page/feed/nav created | Task 9 (App.tsx route) failed due to max_tokens. StandupFeed used wrong interface. Rewrote StandupFeed, StandupsPage. Added route manually. |
+
+**Autonomous success rate: 0 of 7 tasks completed without intervention (0%).** Every task required manual fixes. However, the agent provided useful scaffolding in all cases — it identified the right files to create/modify and generated ~60-70% correct code, which was faster to fix than writing from scratch.
+
+**New intervention patterns identified:**
+
+5. **Schema/contract blindness (tasks 1, 3, 5, 6):** The agent doesn't retain the specific schema from the prompt. When told to use 7 kanban statuses, it used 3. When told to use `yesterday/today/blockers`, it used `title/content`. The agent falls back to common patterns it has seen in training rather than following the exact specification.
+
+6. **Export pattern mismatch (task 5):** The agent used `export default router` instead of the codebase's factory function pattern (`export function createXRouter(pool)`). It also created `const pool = new Pool()` at module level instead of accepting pool as a dependency injection parameter — the opposite of the pattern used in every other route file.
+
+7. **Token limit failures (task 7):** Long-running tasks (432s) hit the model's max_tokens limit, causing subtasks to fail silently. The agent continued to the next subtask instead of retrying.
+
+**What shipped:**
+- 7-column kanban board with drag-and-drop (@dnd-kit)
+- Issues PATCH /status endpoint for quick status changes
+- Standups CRUD with auth, idempotent upsert, author-only mutations
+- GET /status endpoint (has user submitted today?)
+- StandupsPage with date navigation and team feed
+- Standups in sidebar navigation
+
+**Updated metrics after this sprint:**
+
+| Metric | Before | After | Delta |
+|--------|--------|-------|-------|
+| API routes | 14 | 15 (+standups) | +1 |
+| Frontend pages | 11 | 12 (+standups) | +1 |
+| Frontend components | 10 | 16 (+kanban 3, standup 2, admin 1) | +6 |
+| Issue statuses | 4 (open/in_progress/done/closed) | 7 (triage/backlog/todo/in_progress/in_review/done/cancelled) | +3 |
+| Human interventions (total) | 12 | 19 (+7 kanban/standups tasks) | +7 |
+| Agent tasks run (total) | 10 | 17 (+7) | +7 |
 
 ### What Would Actually Ship
 
