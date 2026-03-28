@@ -68,7 +68,14 @@ export function createApp(pool: pg.Pool): Express {
   const webDistPath = process.env.NODE_ENV === "production"
     ? path.join(__dirname, "../../public")
     : path.join(__dirname, "../../web/dist");
-  app.use(express.static(webDistPath));
+  app.use(express.static(webDistPath, {
+    // Cache JS/CSS with hashed names for 1 year, but never cache index.html
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      }
+    },
+  }));
 
   // SPA fallback — serve index.html for frontend routes only
   app.get("*", (req, res, next) => {
@@ -77,6 +84,7 @@ export function createApp(pool: pg.Pool): Express {
       return next();
     }
     const indexPath = path.join(webDistPath, "index.html");
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(indexPath, (err) => {
       if (err) next();
     });
