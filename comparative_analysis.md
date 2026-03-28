@@ -53,11 +53,12 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 | Frontend bundle size (JS, gzipped) | not measured | 201.78 KB (657 KB uncompressed) | Vite warns >500 KB; needs code-splitting |
 | Frontend bundle size (CSS, gzipped) | not measured | 4.37 KB (17.49 KB uncompressed) | — |
 | Trace files generated | — | 172 (LangSmith runs during Ship rebuild + agent dev) | — |
-| Shipyard agent tests | — | 157 (all passing) | — |
+| Shipyard agent tests | — | 170 (all passing, 7 tools, all-OpenAI model config) | — |
 | Time to build MVP agent | — | ~8 hours | — |
 | Time to build Ship (agent-driven) | — | ~6 hours active agent time | — |
 | Total commits | — | 30+ | — |
-| Human interventions | — | 11 | — |
+| Human interventions | — | 12 | — |
+| Batch feature tasks completed | — | 10 of 10 (38 min total) | — |
 
 ### Agent Speed Metrics (from git log timestamps)
 
@@ -65,6 +66,7 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 - **5 features in parallel** (Swagger, WCAG, Ships, TipTap, WebSocket): 32 minutes (09:53 → 09:54 on March 26, agent output; longer wall clock due to API rate limits)
 - **5 TDD features in parallel** (unified docs, auth, dashboard, programs, comments+search): ~2 hours including retries from supervisor bug
 - **Single feature average**: 8-15 minutes per CRUD module in multi-agent mode
+- **10 TDD features via batch runner** (auth RBAC, 2 contexts, API routes, API client, 3 components, test expansion): 38 minutes total. Claude Sonnet averaged 329s/task, GPT-4o averaged 60s/task (~5.5x faster).
 
 ## 4. Shortcomings
 
@@ -83,6 +85,7 @@ Every human intervention during the rebuild, with timestamps and root cause anal
 | 9 | Mar 26 12:45 | Migrations failed on re-run — `CREATE TABLE` not idempotent | Added `_migrations` tracking table with idempotent execution | 20 min | Agent generated `CREATE TABLE` without `IF NOT EXISTS`; no migration state tracking |
 | 10 | Mar 26 12:48 | Issue dropdowns showed no results for "In Progress" | Changed `in-progress` to `in_progress` in frontend | 2 min | Frontend used kebab-case (`in-progress`), database used snake_case (`in_progress`) — convention mismatch across agent sessions |
 | 11 | Mar 26 13:41 | Login failed — backend expected `username`, frontend sent `email` | Updated login route to accept both; added `authFetch` helper | 20 min | Auth backend and auth frontend were built by different agent sessions with no shared contract |
+| 12 | Mar 27 16:44 | Anthropic API budget exhausted mid-task 8 | Switched all workers from Claude Sonnet to GPT-4o | 10 min | 7 consecutive agent tasks consumed the monthly API budget. No cost guardrail to detect approaching limits. |
 
 ### Patterns in Failures
 
@@ -91,6 +94,8 @@ Every human intervention during the rebuild, with timestamps and root cause anal
 2. **Accumulated state problems (interventions 7, 8, 9):** The agent treats each instruction independently. It doesn't maintain awareness of what previous sessions created, leading to migration conflicts and architectural drift.
 
 3. **Infrastructure blindness (interventions 2, 4, 5):** The agent builds application code well but misses deployment and infrastructure concerns — health checks, SPA routing conflicts, Docker multi-stage builds. These require system-level thinking the agent lacks.
+
+4. **Cost/rate limit blindness (intervention #12):** The agent has no awareness of API costs or rate limits. It will happily burn through an entire monthly budget in 38 minutes of batch execution. The batch runner needs a cost estimator and a circuit breaker.
 
 ## 5. Advances
 
@@ -105,6 +110,8 @@ Where the agent genuinely outperformed manual development:
 4. **WCAG accessibility pass:** The agent added ARIA labels, focus indicators, semantic HTML, and skip-to-content links across all frontend components in a single 15-minute pass. A human would need to audit each component individually.
 
 5. **Documentation velocity:** OpenAPI/Swagger docs, JSDoc annotations, and API endpoint documentation generated automatically during feature creation — not as an afterthought.
+
+6. **Model portability:** Switching from Claude Sonnet to GPT-4o required changing one line in models.py. The LangChain abstraction paid off — all 7 tools, prompts, and the supervisor graph worked identically across providers. GPT-4o produced adequate TDD output at 5.5x the speed.
 
 ## 6. Trade-off Analysis
 
@@ -135,6 +142,12 @@ Where the agent genuinely outperformed manual development:
 - **Was it right?** No. This was the single worst architectural decision. It happened because the MVP was built with separate tables (simpler, faster), and the final version required a unified model (matching the original). Now both exist and the codebase has two competing data access patterns.
 - **What I'd change:** Start with the unified document model from day 1, even in the MVP. The extra 30 minutes upfront would have saved 2+ hours of migration work.
 
+### Decision 5: All-OpenAI Model Configuration
+- **Choice:** Switched all workers (including backend/frontend) from Claude Sonnet to GPT-4o
+- **Alternatives:** Keep Claude for complex editing, use GPT-4o-mini for everything, hybrid per-task routing
+- **Was it right?** Yes for sprint velocity. GPT-4o was 5.5x faster per task and avoided the Anthropic budget limit. Code quality was adequate for TDD tasks where the tests validate correctness. For more nuanced architectural decisions, Claude's output was noticeably better.
+- **What I'd change:** Add a cost-aware model router that tracks spend per provider and auto-switches when approaching limits, rather than requiring manual intervention.
+
 ## 7. If You Built It Again
 
 ### Agent Architecture Changes
@@ -156,6 +169,39 @@ Where the agent genuinely outperformed manual development:
 6. **Session continuity:** The agent has no memory between sessions. Each agent run starts fresh, which is why it creates duplicate structures. Solution: persistent project memory that stores "what exists" — tables, routes, pages, types — and is loaded at the start of every session.
 
 7. **Token budget allocation:** The multi-agent sessions hit Anthropic's 450K input tokens/minute rate limit repeatedly. Solution: stagger parallel agents by 30 seconds, or use a smaller model (Haiku) for simple tasks like `list_files` and reserve Sonnet for `edit_file` calls.
+
+### Agent Capability Gaps Identified (2026-03-27)
+
+8. **No search capability:** The original 5 tools (read, create, list, edit, run_command) had no grep/search. The agent could only read files it already knew about — it couldn't discover patterns, find imports, or locate conventions. This directly caused the test quality problem: the agent invented its own test patterns instead of finding and copying existing ones.
+
+9. **Insufficient read and timeout limits:** `MAX_READ_LINES=500` truncated most real-world files. `COMMAND_TIMEOUT=30s` killed every `npm install` and `pnpm build`. The agent couldn't read its context or verify its work.
+
+10. **Wrong workspace paths:** Worker prompts referenced `api/` and `web/` but the Ship app lives at `ship/api/` and `ship/web/`. Every worker was targeting the wrong directory.
+
+**Resolution:** Added `search_files` (regex grep with glob filtering), `scan_workspace` (directory tree), bumped limits (2000 lines, 120s timeout), fixed paths. All 170 agent tests passing.
+
+### Prompt Engineering Findings (2026-03-27 — Task 1 Retrospective)
+
+The agent's first attempt at Task 1 (auth middleware RBAC) revealed a critical pattern:
+
+**Problem:** Given a generic TDD instruction ("write tests first"), the agent produced scaffold tests with:
+- Imports from nonexistent utilities (`createAdminSession` from `../utils/session`)
+- Placeholder routes (`/admin/some-protected-route` with "Replace with..." comments)
+- Wrong auth pattern (cookies instead of `x-session-token` header)
+- Missing vitest imports (used bare `describe/it/expect` without importing from "vitest")
+
+**Root cause:** The agent didn't read existing tests before writing its own. Despite having `search_files` available, it wasn't instructed to use it for pattern discovery.
+
+**Fix:** Rewrote TDD preamble to:
+1. REQUIRE reading at least one existing test file before writing any test
+2. Specify exact import patterns: `import { describe, it, expect } from "vitest"`
+3. Specify exact test infrastructure: testPool, mini express app, beforeAll/afterAll table management
+4. Ban placeholder code: "Do NOT add comments that say 'Replace with...' — use real values"
+5. Provide the exact file path of the reference test to copy from
+
+**Lesson:** Autonomous agents need *exemplar-driven prompts*, not *instruction-driven prompts*. Saying "write tests" produces generic scaffolds. Saying "copy the pattern from auth.test.ts using vitest + supertest + testPool" produces runnable tests. The agent is a pattern replicator, not a pattern inventor.
+
+This matches intervention #11 from the original rebuild — when the auth frontend and backend were built by different agent sessions with no shared reference, they disagreed on the contract. The fix is the same: give every agent session an explicit exemplar to copy from.
 
 ### What Would Actually Ship
 
