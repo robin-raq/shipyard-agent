@@ -19,6 +19,7 @@ import { createDashboardRouter } from "./routes/dashboard.js";
 import { createSearchRouter } from "./routes/search.js";
 import { createAccountabilityRouter } from "./routes/accountability.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { createStandupsRouter } from "./routes/standups.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,7 +51,9 @@ export function createApp(pool: pg.Pool): Express {
   app.use("/api/search", createSearchRouter(pool));
   app.use("/api/accountability", createAccountabilityRouter(pool));
 
-  // API Documentation
+  app.use("/api/standups", createStandupsRouter(pool));
+
+// API Documentation
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
   // Serve static files from web client (Docker: /app/public, dev: ../../web/dist)

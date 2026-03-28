@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import pg from "pg";
 
-const VALID_STATUSES = ["open", "in_progress", "closed", "done"];
+const VALID_STATUSES = ["triage", "backlog", "todo", "in_progress", "in_review", "done", "cancelled"];
 const VALID_PRIORITIES = ["low", "medium", "high", "urgent"];
 
 export function createIssuesRouter(pool: pg.Pool): Router {
@@ -10,7 +10,7 @@ export function createIssuesRouter(pool: pg.Pool): Router {
   // GET / - list all issues with optional status and priority filters
   router.get("/", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { status, priority } = req.query;
+      const { status, priority, assignee_id } = req.query;
 
       let query = "SELECT * FROM issues WHERE deleted_at IS NULL";
       const params: string[] = [];
@@ -38,6 +38,11 @@ export function createIssuesRouter(pool: pg.Pool): Router {
         }
         query += ` AND priority = $${paramCount++}`;
         params.push(priority as string);
+      }
+
+      if (assignee_id) {
+        query += ` AND assignee_id = $${paramCount++}`;
+        params.push(assignee_id as string);
       }
 
       query += " ORDER BY created_at DESC";
@@ -76,7 +81,7 @@ export function createIssuesRouter(pool: pg.Pool): Router {
   // POST / - create new issue
   router.post("/", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { title, content, status, priority } = req.body;
+      const { title, content, status, priority, assignee_id } = req.body;
 
       if (!title) {
         return res.status(400).json({
@@ -103,10 +108,10 @@ export function createIssuesRouter(pool: pg.Pool): Router {
       }
 
       const result = await pool.query(
-        `INSERT INTO issues (title, content, status, priority)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO issues (title, content, status, priority, assignee_id)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [title, content || "", status || "open", priority || "medium"]
+        [title, content || "", status || "triage", priority || "medium", assignee_id || null]
       );
 
       res.status(201).json(result.rows[0]);
@@ -119,7 +124,7 @@ export function createIssuesRouter(pool: pg.Pool): Router {
   router.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { title, content, status, priority } = req.body;
+      const { title, content, status, priority, assignee_id } = req.body;
 
       const updates: string[] = [];
       const params: any[] = [];
@@ -159,6 +164,11 @@ export function createIssuesRouter(pool: pg.Pool): Router {
         params.push(priority);
       }
 
+      if (assignee_id !== undefined) {
+        updates.push(`assignee_id = $${paramCount++}`);
+        params.push(assignee_id);
+      }
+
       if (updates.length === 0) {
         return res.status(400).json({
           error: true,
@@ -176,6 +186,42 @@ export function createIssuesRouter(pool: pg.Pool): Router {
          WHERE id = $${paramCount} AND deleted_at IS NULL
          RETURNING *`,
         params
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          error: true,
+          message: "Issue not found",
+          status: 404,
+        });
+      }
+
+      res.status(200).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // PATCH /:id/status - update issue status
+  router.patch('/:id/status', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!VALID_STATUSES.includes(status)) {
+        return res.status(400).json({
+          error: true,
+          message: "Invalid status",
+          status: 400,
+        });
+      }
+
+      const result = await pool.query(
+        `UPDATE issues
+         SET status = $1, updated_at = NOW()
+         WHERE id = $2 AND deleted_at IS NULL
+         RETURNING *`,
+        [status, id]
       );
 
       if (result.rows.length === 0) {

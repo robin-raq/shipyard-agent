@@ -12,6 +12,7 @@ export default function Layout() {
     { path: '/projects', label: 'Projects', icon: '📁' },
     { path: '/weeks', label: 'Weeks', icon: '📅' },
     { path: '/teams', label: 'Teams', icon: '👥' },
+    { path: '/standups', label: 'Standups', icon: '📝' },
     { path: '/ships', label: 'Ships', icon: '⛵' },
     { path: '/programs', label: 'Programs', icon: '🎯' },
   ];

@@ -6,6 +6,8 @@ async function handleResponse(response: Response) {
   return response.json();
 }
 
+import { authFetch } from '../context/AuthContext';
+
 // Docs API
 export async function getDocs() {
   const response = await fetch('/api/docs');
@@ -47,6 +49,17 @@ export async function deleteDoc(id: string) {
 }
 
 // Issues API
+export async function updateIssueStatus(id: string, status: string) {
+  const response = await authFetch(`/api/issues/${id}/status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status }),
+  });
+  return handleResponse(response);
+}
+
 export async function getIssues(filters?: { status?: string; priority?: string }) {
   let url = '/api/issues';
   if (filters) {
@@ -251,6 +264,46 @@ export async function deleteShip(id: string) {
   const response = await fetch(`/api/ships/${id}`, {
     method: 'DELETE',
   });
+  return handleResponse(response);
+}
+
+// Standups API
+export async function getStandups(filters?: { date?: string; user_id?: string; from?: string; to?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.date) params.set('date', filters.date);
+  if (filters?.user_id) params.set('user_id', filters.user_id);
+  if (filters?.from) params.set('from', filters.from);
+  if (filters?.to) params.set('to', filters.to);
+  const query = params.toString();
+  const response = await authFetch(`/api/standups${query ? '?' + query : ''}`);
+  return handleResponse(response);
+}
+
+export async function getStandupStatus() {
+  const response = await authFetch('/api/standups/status');
+  return handleResponse(response);
+}
+
+export async function createStandup(data: { yesterday: string; today: string; blockers: string }) {
+  const response = await authFetch('/api/standups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function updateStandup(id: string, data: { yesterday?: string; today?: string; blockers?: string }) {
+  const response = await authFetch(`/api/standups/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function deleteStandup(id: string) {
+  const response = await authFetch(`/api/standups/${id}`, { method: 'DELETE' });
   return handleResponse(response);
 }
 

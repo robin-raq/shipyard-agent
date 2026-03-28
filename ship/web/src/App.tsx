@@ -13,6 +13,7 @@ import ProgramsPage from './pages/ProgramsPage';
 import ProgramDetailPage from './pages/ProgramDetailPage';
 import DocumentDetailPage from './pages/DocumentDetailPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import StandupsPage from './pages/StandupsPage';
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
@@ -40,6 +41,7 @@ function ProtectedRoutes() {
         <Route path="weeks" element={<WeeksPage />} />
         <Route path="teams" element={<TeamsPage />} />
         <Route path="ships" element={<ShipsPage />} />
+        <Route path="standups" element={<StandupsPage />} />
         <Route path="programs" element={<ProgramsPage />} />
         <Route path="programs/:id" element={<ProgramDetailPage />} />
         <Route path=":type/:id" element={<DocumentDetailPage />} />

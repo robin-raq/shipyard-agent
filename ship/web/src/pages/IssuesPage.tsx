@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getIssues, deleteIssue, createIssue } from '../api/client';
+import { getIssues, deleteIssue, createIssue, updateIssueStatus } from '../api/client';
+import KanbanBoard from '../components/KanbanBoard';
 import DocumentForm from '../components/DocumentForm';
 
 interface Issue {
@@ -12,11 +13,16 @@ interface Issue {
   created_at: string;
 }
 
+const VALID_STATUSES = ['triage', 'backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled'];
+
 const STATUS_COLORS: Record<string, string> = {
-  open: 'bg-blue-100 text-blue-800',
+  triage: 'bg-purple-100 text-purple-800',
+  backlog: 'bg-gray-100 text-gray-800',
+  todo: 'bg-blue-100 text-blue-800',
   in_progress: 'bg-yellow-100 text-yellow-800',
-  closed: 'bg-green-100 text-green-800',
-  blocked: 'bg-red-100 text-red-800',
+  in_review: 'bg-indigo-100 text-indigo-800',
+  done: 'bg-green-100 text-green-800',
+  cancelled: 'bg-red-100 text-red-800',
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -32,6 +38,7 @@ export default function IssuesPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('');
+const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
   const navigate = useNavigate();
 
@@ -69,7 +76,7 @@ export default function IssuesPage() {
 
   const handleCreate = async (data: { title: string; content: string }) => {
     try {
-      await createIssue({ ...data, status: 'open', priority: 'medium' });
+      await createIssue({ ...data, status: 'triage', priority: 'medium' });
       setShowCreateForm(false);
       await fetchIssues();
     } catch (err) {
@@ -92,6 +99,22 @@ export default function IssuesPage() {
   return (
     <main className="p-8">
       <header className="mb-6 flex items-center justify-between">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            aria-label="Switch to list view"
+          >
+            List View
+          </button>
+          <button
+            onClick={() => setViewMode('board')}
+            className={`px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${viewMode === 'board' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            aria-label="Switch to board view"
+          >
+            Board View
+          </button>
+        </div>
         <h1 className="text-3xl font-bold text-gray-900">Issues</h1>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
@@ -129,10 +152,13 @@ export default function IssuesPage() {
             aria-label="Filter issues by status"
           >
             <option value="">All Statuses</option>
-            <option value="open">Open</option>
+            <option value="triage">Triage</option>
+            <option value="backlog">Backlog</option>
+            <option value="todo">To Do</option>
             <option value="in_progress">In Progress</option>
-            <option value="closed">Closed</option>
-            <option value="blocked">Blocked</option>
+            <option value="in_review">In Review</option>
+            <option value="done">Done</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </div>
         <div>
@@ -155,71 +181,69 @@ export default function IssuesPage() {
         </div>
       </section>
 
-      <section className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-        {issues.length === 0 ? (
-          <div className="p-8 text-center text-gray-700">
-            No issues found. Create one to get started!
-          </div>
-        ) : (
-          <table className="w-full" role="table" aria-label="Issues list">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr role="row">
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Title
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Priority
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {issues.map((issue) => (
-                <tr
-                  key={issue.id}
-                  onClick={() => handleRowClick(issue.id)}
-                  className="hover:bg-gray-50 cursor-pointer transition-colors"
-                  role="row"
-                >
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    {issue.title}
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[issue.status] || 'bg-gray-100 text-gray-800'}`} role="status" aria-label={`Status: ${issue.status}`}>
-                      {issue.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className={`font-semibold ${PRIORITY_COLORS[issue.priority] || 'text-gray-700'}`}>
-                      {issue.priority}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-700">
-                    {new Date(issue.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm">
-                    <button
-                      onClick={(e) => handleDelete(issue.id, e)}
-                      className="text-red-700 hover:text-red-900 font-medium focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded px-2 py-1"
-                      aria-label={`Delete issue ${issue.title}`}
-                    >
-                      Delete
-                    </button>
-                  </td>
+      {viewMode === 'list' ? (
+        <section className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          {issues.length === 0 ? (
+            <div className="p-8 text-center text-gray-700">
+              No issues found. Create one to get started!
+            </div>
+          ) : (
+            <table className="w-full" role="table" aria-label="Issues list">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr role="row">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Title</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Priority</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Created</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {issues.map((issue) => (
+                  <tr
+                    key={issue.id}
+                    onClick={() => handleRowClick(issue.id)}
+                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    role="row"
+                  >
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{issue.title}</td>
+                    <td className="px-6 py-4 text-sm">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[issue.status] || 'bg-gray-100 text-gray-800'}`}>
+                        {issue.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <span className={`font-semibold ${PRIORITY_COLORS[issue.priority] || 'text-gray-700'}`}>
+                        {issue.priority}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-700">
+                      {new Date(issue.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm">
+                      <button
+                        onClick={(e) => handleDelete(issue.id, e)}
+                        className="text-red-700 hover:text-red-900 font-medium"
+                        aria-label={`Delete issue ${issue.title}`}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      ) : (
+        <KanbanBoard
+          issues={issues}
+          onStatusChange={async (id, status) => {
+            await updateIssueStatus(id, status);
+            await fetchIssues();
+          }}
+        />
+      )}
     </main>
   );
 }
