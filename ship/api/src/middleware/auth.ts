@@ -9,6 +9,7 @@ declare global {
         id: string;
         username: string;
         email: string;
+        role: string;
       };
       sessionId?: string;
     }
@@ -42,7 +43,8 @@ export function createAuthMiddleware(pool: pg.Pool) {
           s.user_id,
           s.expires_at,
           u.username,
-          u.email
+          u.email,
+          u.role
         FROM sessions s
         JOIN users u ON s.user_id = u.id
         WHERE s.session_id = $1`,
@@ -78,6 +80,7 @@ export function createAuthMiddleware(pool: pg.Pool) {
         id: session.user_id,
         username: session.username,
         email: session.email,
+        role: session.role,
       };
       req.sessionId = session.session_id;
 
@@ -114,7 +117,8 @@ export function createOptionalAuthMiddleware(pool: pg.Pool) {
           s.user_id,
           s.expires_at,
           u.username,
-          u.email
+          u.email,
+          u.role
         FROM sessions s
         JOIN users u ON s.user_id = u.id
         WHERE s.session_id = $1`,
@@ -129,6 +133,7 @@ export function createOptionalAuthMiddleware(pool: pg.Pool) {
             id: session.user_id,
             username: session.username,
             email: session.email,
+            role: session.role,
           };
           req.sessionId = session.session_id;
         }
@@ -139,5 +144,33 @@ export function createOptionalAuthMiddleware(pool: pg.Pool) {
       console.error("Optional authentication error:", error);
       next();
     }
+  };
+}
+
+/**
+ * Middleware to check if user has one of the allowed roles
+ * Must be used after createAuthMiddleware
+ */
+export function createRoleMiddleware(allowedRoles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    // Check if user is authenticated
+    if (!req.user) {
+      return res.status(401).json({
+        error: true,
+        message: "Authentication required",
+        status: 401,
+      });
+    }
+
+    // Check if user's role is in the allowed roles
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        error: true,
+        message: "Insufficient permissions",
+        status: 403,
+      });
+    }
+
+    next();
   };
 }

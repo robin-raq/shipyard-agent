@@ -1,3 +1,4 @@
+import "dotenv/config";
 import pg from "pg";
 import { readdir, readFile } from "fs/promises";
 import { join, dirname } from "path";
