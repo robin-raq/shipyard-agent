@@ -11,6 +11,11 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from dotenv import load_dotenv
+
+# Load API keys before any LLM imports
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[3] / ".env", override=True)
+
 from shipyard.evals.mock_responses import (
     multi_agent_supervisor_responses,
     multi_agent_worker_responses,
