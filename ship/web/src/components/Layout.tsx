@@ -13,6 +13,9 @@ export default function Layout() {
     { path: '/weeks', label: 'Weeks', icon: '📅' },
     { path: '/teams', label: 'Teams', icon: '👥' },
     { path: '/standups', label: 'Standups', icon: '📝' },
+    { path: '/weekly-plans', label: 'Plans', icon: '📋' },
+    { path: '/weekly-retros', label: 'Retros', icon: '🔄' },
+    { path: '/reviews', label: 'Reviews', icon: '✅' },
     { path: '/ships', label: 'Ships', icon: '⛵' },
     { path: '/programs', label: 'Programs', icon: '🎯' },
   ];

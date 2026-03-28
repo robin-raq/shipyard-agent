@@ -14,6 +14,9 @@ import ProgramDetailPage from './pages/ProgramDetailPage';
 import DocumentDetailPage from './pages/DocumentDetailPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import StandupsPage from './pages/StandupsPage';
+import WeeklyPlansPage from './pages/WeeklyPlansPage';
+import WeeklyRetrosPage from './pages/WeeklyRetrosPage';
+import ReviewsPage from './pages/ReviewsPage';
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
@@ -42,6 +45,9 @@ function ProtectedRoutes() {
         <Route path="teams" element={<TeamsPage />} />
         <Route path="ships" element={<ShipsPage />} />
         <Route path="standups" element={<StandupsPage />} />
+        <Route path="weekly-plans" element={<WeeklyPlansPage />} />
+        <Route path="weekly-retros" element={<WeeklyRetrosPage />} />
+        <Route path="reviews" element={<ReviewsPage />} />
         <Route path="programs" element={<ProgramsPage />} />
         <Route path="programs/:id" element={<ProgramDetailPage />} />
         <Route path=":type/:id" element={<DocumentDetailPage />} />
