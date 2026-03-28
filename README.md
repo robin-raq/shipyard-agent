@@ -15,13 +15,15 @@ Built as a @GauntletAI sprint project.
                     └──────────────────────────────────┘
 
                         Multi-Agent Mode (/multi)
-┌──────────────────────────────────────────────────────────────────┐
-│  START → decompose → execute_next_task ←→ check_if_done         │
-│                                                ↓                │
-│                                            validate → END       │
-│                                                                  │
-│  Workers: [backend] [frontend] [database] [shared]              │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  START → decompose → gather_context → execute_next_task → verify_task   │
+│                                              ↑                 ↓        │
+│                                              └──── check_if_done        │
+│                                                        ↓                │
+│                                                    validate → END       │
+│                                                                          │
+│  Workers: [backend] [frontend] [database] [shared]                      │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Single-agent mode** runs a tool-calling loop: Claude reads files, makes edits, runs commands, and verifies results until the task is done.
@@ -37,7 +39,7 @@ Built as a @GauntletAI sprint project.
 | Observability | LangSmith (auto-tracing) + local JSON traces |
 | File editing | Anchor-based surgical replacement |
 | Language | Python 3.11+ |
-| Tests | pytest (104 tests, all offline/mocked) |
+| Tests | pytest (184 tests, all offline/mocked) |
 
 ### Cost-Optimized Model Routing
 
@@ -47,11 +49,13 @@ In multi-agent mode, structured/predictable tasks (supervisor decomposition, dat
 
 | Tool | Purpose |
 |------|---------|
-| `read_file` | Read file with line numbers (capped at 500 lines) |
+| `read_file` | Read file with line numbers (capped at 2,000 lines) |
 | `edit_file` | Anchor-based surgical edit with backup + verification |
 | `create_file` | Create new files (refuses to overwrite) |
 | `list_files` | List directory contents with optional glob |
 | `run_command` | Execute allowlisted programs (no shell injection) |
+| `search_files` | Regex grep across files with glob filtering |
+| `scan_workspace` | Directory tree overview for codebase discovery |
 
 ## Security
 
@@ -123,7 +127,7 @@ shipyard> /quit
 pytest -v
 ```
 
-All 109 tests run offline with mocked LLMs — no API keys needed for testing.
+All 184 tests run offline with mocked LLMs — no API keys needed for testing. Live evals (7 tasks) available via `python -m shipyard.evals --live`.
 
 ## Project Structure
 
@@ -135,21 +139,26 @@ src/shipyard/
 ├── worker.py          # Worker subgraph factory
 ├── worker_prompts.py  # Role-specific prompts (backend, frontend, database, shared)
 ├── models.py          # Cost-optimized LLM selection (Claude vs GPT-4o-mini)
-├── tools.py           # 5 core tools with workspace sandbox
+├── tools.py           # 7 tools with workspace sandbox
 ├── prompts.py         # Single-agent system prompt
 ├── state.py           # AgentState, SupervisorState, TaskItem schemas
-└── tracing.py         # Local JSON trace collector with redaction
+├── tracing.py         # Local JSON trace collector with redaction
+├── memory.py          # Persistent project memory
+└── rules.py           # Custom rules loaded from directory
 
 tests/
 ├── test_agent.py           # Graph compilation, routing, tool loops
-├── test_supervisor.py      # Decomposition, execution, routing, full flow
+├── test_supervisor.py      # Decomposition, execution, routing, gather_context, verify_task
 ├── test_worker.py          # Worker factory, isolation, prompt injection
 ├── test_worker_prompts.py  # Prompt content validation
-├── test_models.py          # Model selection and fallback
-├── test_tools.py           # All 5 tools + workspace sandbox + command allowlist
+├── test_models.py          # Model selection, fallback, cost routing
+├── test_tools.py           # All 7 tools + workspace sandbox + command allowlist
 ├── test_tracing.py         # Trace collection + secret redaction
 ├── test_state.py           # State schema validation
 ├── test_repl.py            # REPL commands and mode switching
+├── test_memory.py          # Persistent memory save/load/forget
+├── test_rules.py           # Custom rules loading and injection
+├── test_evals.py           # 12 mock evals + 7 live evals
 └── conftest.py             # Shared fixtures
 ```
 
@@ -168,9 +177,9 @@ The Shipyard agent rebuilt the US Treasury Department's [Ship](https://github.co
 
 ### What's Included
 
-- **14 API routes:** docs, issues, projects, weeks, teams, ships, programs, comments, dashboard, search, auth, documents, health, swagger
-- **11 frontend pages:** Dashboard, Docs, Issues, Projects, Weeks, Teams, Ships, Programs, Login, Document Detail, Program Detail
-- **Features:** Authentication with sessions, full-text search (PostgreSQL tsvector), comments with threading, programs with associations, WCAG 2.1 AA accessibility, OpenAPI/Swagger docs at `/api-docs`
+- **18 API routes:** docs, issues, projects, weeks, teams, ships, programs, comments, dashboard, search, auth, documents, standups, weekly-plans, retros, reviews, feedback, health
+- **12+ frontend pages:** Dashboard, Docs, Issues (list + kanban), Projects, Weeks, Teams, Ships, Programs, Standups, Login, Document Detail, Program Detail
+- **Features:** Authentication with sessions, full-text search (PostgreSQL tsvector), comments with threading, programs with associations, kanban board (@dnd-kit), standups (daily check-ins), weekly plans/retros/reviews, rich text editor (TipTap), WCAG 2.1 AA accessibility, OpenAPI/Swagger docs at `/api-docs`
 - **Stack:** React + Vite + TailwindCSS (frontend), Express + PostgreSQL (API), Railway (deployment)
 
 ### API Endpoints
@@ -188,13 +197,13 @@ The Shipyard agent rebuilt the US Treasury Department's [Ship](https://github.co
 
 ## Documentation
 
-- **CODEAGENT.md** — detailed agent architecture, editing strategy, tracing, multi-agent design
-- **COMPARATIVE_ANALYSIS.md** — 7-section analysis: agent-built vs original Ship (benchmarks, interventions, trade-offs)
-- **AI_DEVELOPMENT_LOG.md** — rebuild session log with 21 actions, 11 interventions
-- **AI_COST_ANALYSIS.md** — token usage, cost breakdown, production scaling model
-- **PRESEARCH.md** — research phase: architecture decisions, alternatives considered
-- **MVP_PRD.md** — MVP product requirements
-- **FINAL_PRD.md** — Full project requirements (multi-agent + Ship rebuild)
+| File | Content |
+|------|---------|
+| [CODEAGENT.md](CODEAGENT.md) | Full agent documentation — architecture, editing strategy, multi-agent design, architecture decisions, rebuild log, comparative analysis, cost analysis |
+| [PRESEARCH.md](PRESEARCH.md) | Pre-search research — OpenCode + Claude Code analysis, architecture design, stack decisions |
+| [AI_DEVELOPMENT_LOG.md](AI_DEVELOPMENT_LOG.md) | Development log — tools, prompts, code analysis, rebuild session log (25 actions, 19 interventions) |
+| [AI_COST_ANALYSIS.md](AI_COST_ANALYSIS.md) | Cost analysis — dev costs ($5.10 total), production projections (100/1K/10K users) |
+| [comparative_analysis.md](comparative_analysis.md) | 7-section comparative analysis — original Ship vs. agent-built Ship (benchmarks, shortcomings, advances, trade-offs) |
 
 ## License
 

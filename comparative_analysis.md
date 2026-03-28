@@ -42,18 +42,17 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 
 | Metric | Original | Agent-Built | Delta |
 |--------|----------|-------------|-------|
-| Total source lines (TS/TSX) | 122,920 | 16,818 | 14% coverage |
-| Source files | 409 | 64 | 16% coverage |
-| Test files | 115 | 75 | 65% coverage |
-| Test lines | 40,839 | 19,799 | 49% coverage |
-| API route files | 48 | 15 | 31% coverage |
-| Frontend pages | 24 | 12 | 50% coverage |
+| Total source lines (TS/TSX) | 122,920 | 27,890 | 23% coverage |
+| Source files | 409 | 64+ | 16% coverage |
+| Test files | 115 | 114 | 99% coverage |
+| API route files | 48 | 18 | 38% coverage |
+| Frontend pages | 24 | 12+ | 50% coverage |
 | Database migrations | 50+ | 14 | 28% coverage |
 | Frontend build time | not measured (no local build available) | 7.2s (`tsc -b && vite build`) | — |
 | Frontend bundle size (JS, gzipped) | not measured | 201.78 KB (657 KB uncompressed) | Vite warns >500 KB; needs code-splitting |
 | Frontend bundle size (CSS, gzipped) | not measured | 4.37 KB (17.49 KB uncompressed) | — |
-| Trace files generated | — | 172 (LangSmith runs during Ship rebuild + agent dev) | — |
-| Shipyard agent tests | — | 140 unit + 12 mock evals + 7 live evals | — |
+| Trace files generated | — | 214 (LangSmith runs during Ship rebuild + agent dev) | — |
+| Shipyard agent tests | — | 184 unit + mock evals + 7 live evals | — |
 | Time to build MVP agent | — | ~8 hours | — |
 | Time to build Ship (agent-driven) | — | ~6 hours active agent time | — |
 | Total commits | — | 30+ | — |

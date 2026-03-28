@@ -63,7 +63,7 @@ of name or description.
 | **Claude Code-generated (via Claude Code CLI)** | Agent core (tools.py, agent.py, supervisor.py), tests, prompts, tracing | ~45% |
 | **Hand-written** | .env configuration, Docker/Railway tweaks, architectural decisions, prompt refinements | ~15% |
 
-Out of 38 total commits: 11 are "(agent-generated)" via the Shipyard agent, 27 via Claude Code or human edits. The agent generated most of the Ship app rebuild; Claude Code generated most of the agent infrastructure.
+Out of 96 total commits: 23 are agent-generated via the Shipyard agent, 73 via Claude Code or human edits. The agent generated most of the Ship app rebuild; Claude Code generated most of the agent infrastructure.
 
 ---
 
@@ -134,13 +134,14 @@ Chronological log of the Ship app rebuild using the Shipyard agent. Each entry r
 
 | Metric | Value |
 |--------|-------|
-| Total development time | ~4 days (Mar 23–27) |
-| Commits | 63 |
-| Agent-generated commits | 15 |
-| Ship app source lines | 16,818 |
-| Ship app test files | 69 |
-| Agent test count | 157 (all passing) |
-| LangSmith traces | 174+ |
-| Human interventions | 11 |
-| Estimated API cost | ~$4.32 (Sonnet pricing, last 100 traced runs) |
+| Total development time | ~5 days (Mar 23–28) |
+| Commits | 96 |
+| Agent-generated commits | 23 |
+| Ship app source lines | 27,890 |
+| Ship app test files | 114 |
+| Agent test count | 184 (12 test files, all passing) |
+| Live eval tasks | 7 (71% passing) |
+| LangSmith traces | 214+ |
+| Human interventions | 19 |
+| Estimated API cost | ~$5.10 (blended Sonnet + GPT-4o-mini) |
 | Deployed URL | https://ship-app-production-fd9d.up.railway.app |
