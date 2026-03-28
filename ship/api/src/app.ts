@@ -23,6 +23,7 @@ import { createStandupsRouter } from "./routes/standups.js";
 import { createWeeklyPlansRouter } from "./routes/weekly-plans.js";
 import { createWeeklyRetrosRouter } from "./routes/weekly-retros.js";
 import { createReviewsRouter } from "./routes/reviews.js";
+import { createFeedbackRouter } from "./routes/feedback.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +59,7 @@ export function createApp(pool: pg.Pool): Express {
   app.use("/api/weekly-plans", createWeeklyPlansRouter(pool));
   app.use("/api/weekly-retros", createWeeklyRetrosRouter(pool));
   app.use("/api/reviews", createReviewsRouter(pool));
+  app.use("/api/feedback", createFeedbackRouter(pool));
 
 // API Documentation
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
