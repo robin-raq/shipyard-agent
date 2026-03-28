@@ -48,6 +48,7 @@ class SupervisorState(TypedDict):
         memories: Formatted persistent memories for system prompt.
         rules: Formatted custom rules for system prompt.
         trace_steps: Accumulator for local JSON trace steps.
+        codebase_patterns: Extracted patterns from exemplar files in workspace.
     """
     messages: Annotated[list, add_messages]
     tasks: list[TaskItem]
@@ -56,3 +57,4 @@ class SupervisorState(TypedDict):
     memories: str
     rules: str
     trace_steps: list
+    codebase_patterns: str

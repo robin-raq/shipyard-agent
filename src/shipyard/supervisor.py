@@ -4,8 +4,8 @@ Decomposes user instructions into ordered subtasks, dispatches each
 to a specialized worker subgraph, and validates the combined results.
 
 Graph shape:
-    START → decompose → execute_next_task → check_if_done ──→ execute_next_task
-                                                  └──→ validate → END
+    START → decompose → gather_context → execute_next_task → check_if_done ──→ execute_next_task
+                                                                   └──→ validate → END
 """
 
 import json
@@ -22,6 +22,56 @@ from shipyard.worker_prompts import SUPERVISOR_PROMPT, WORKER_PROMPTS
 
 
 VALID_WORKERS = frozenset({"backend", "frontend", "database", "shared"})
+
+
+def extract_contract(task_description: str) -> str:
+    """Extract critical values from a task description into a Contract block.
+
+    Finds quoted lists, field definitions, and export patterns in the prompt
+    and formats them into a structured section that gets appended to the end
+    of the task description (exploiting LLM recency attention bias).
+
+    Returns empty string if no extractable values found.
+    """
+    lines = []
+
+    # Extract JSON-style lists: ["triage", "backlog", ...]
+    list_matches = re.findall(r'\[(?:"[^"]+",?\s*)+\]', task_description)
+    for match in list_matches:
+        lines.append(f"- Values: {match}")
+
+    # Extract field definitions: yesterday (TEXT), today (TEXT), etc.
+    field_matches = re.findall(
+        r"(\w+)\s*\((?:TEXT|VARCHAR|UUID|DATE|INT|TIMESTAMPTZ|BOOLEAN)\)",
+        task_description,
+        re.IGNORECASE,
+    )
+    if field_matches:
+        lines.append(f"- Fields: {', '.join(field_matches)}")
+
+    # Extract export function patterns
+    export_matches = re.findall(
+        r"(export\s+function\s+\w+\([^)]*\)(?:\s*:\s*\w+)?)",
+        task_description,
+    )
+    for match in export_matches:
+        lines.append(f"- Export: {match}")
+
+    # Extract VALID_STATUSES-style constants
+    const_matches = re.findall(
+        r"(VALID_\w+)\s*=\s*(\[[^\]]+\])",
+        task_description,
+    )
+    for name, value in const_matches:
+        lines.append(f"- {name} = {value}")
+
+    if not lines:
+        return ""
+
+    return (
+        "\n\n## Contract (MUST match exactly — do not substitute alternatives)\n"
+        + "\n".join(lines)
+    )
 
 
 def parse_task_plan(llm_output: str) -> list[dict]:
@@ -90,6 +140,91 @@ Return ONLY a ```json``` code block.
 """
 
 
+def gather_context(state: SupervisorState) -> dict:
+    """Read exemplar files from workspace to inject codebase patterns into worker context.
+
+    Scans task descriptions for keywords (route, migration, component, page)
+    and reads one exemplar file of each type. No LLM call — purely deterministic.
+    """
+    from shipyard.tools import _workspace_root
+
+    if _workspace_root is None:
+        return {"codebase_patterns": ""}
+
+    tasks = state.get("tasks", [])
+    all_descriptions = " ".join(t.get("description", "") for t in tasks).lower()
+
+    patterns_parts = []
+
+    # Route exemplar
+    if any(kw in all_descriptions for kw in ["route", "router", "endpoint", "api"]):
+        route_dir = _workspace_root / "ship" / "api" / "src" / "routes"
+        if route_dir.exists():
+            # Prefer teams.ts as cleanest example, fall back to any .ts file
+            exemplar = route_dir / "teams.ts"
+            if not exemplar.exists():
+                ts_files = sorted(route_dir.glob("*.ts"))
+                exemplar = ts_files[0] if ts_files else None
+            if exemplar and exemplar.exists():
+                content = exemplar.read_text()
+                # Extract first 30 lines (enough for pattern)
+                preview = "\n".join(content.splitlines()[:30])
+                patterns_parts.append(
+                    f"### Route Pattern (from {exemplar.name})\n```typescript\n{preview}\n```"
+                )
+
+    # Migration exemplar
+    if any(kw in all_descriptions for kw in ["migration", "table", "schema", "database"]):
+        mig_dir = _workspace_root / "ship" / "api" / "src" / "db" / "migrations"
+        if mig_dir.exists():
+            sql_files = sorted(mig_dir.glob("*.sql"))
+            if sql_files:
+                exemplar = sql_files[-1]  # Latest migration
+                content = exemplar.read_text()
+                patterns_parts.append(
+                    f"### Migration Pattern (from {exemplar.name})\n```sql\n{content}\n```"
+                )
+
+    # Component exemplar
+    if any(kw in all_descriptions for kw in ["component", "form", "banner", "card"]):
+        comp_dir = _workspace_root / "ship" / "web" / "src" / "components"
+        if comp_dir.exists():
+            exemplar = comp_dir / "DocumentForm.tsx"
+            if not exemplar.exists():
+                tsx_files = sorted(comp_dir.glob("*.tsx"))
+                exemplar = tsx_files[0] if tsx_files else None
+            if exemplar and exemplar.exists():
+                content = exemplar.read_text()
+                preview = "\n".join(content.splitlines()[:30])
+                patterns_parts.append(
+                    f"### Component Pattern (from {exemplar.name})\n```tsx\n{preview}\n```"
+                )
+
+    # Page exemplar
+    if any(kw in all_descriptions for kw in ["page", "view"]):
+        pages_dir = _workspace_root / "ship" / "web" / "src" / "pages"
+        if pages_dir.exists():
+            exemplar = pages_dir / "IssuesPage.tsx"
+            if not exemplar.exists():
+                tsx_files = sorted(pages_dir.glob("*.tsx"))
+                exemplar = tsx_files[0] if tsx_files else None
+            if exemplar and exemplar.exists():
+                content = exemplar.read_text()
+                preview = "\n".join(content.splitlines()[:40])
+                patterns_parts.append(
+                    f"### Page Pattern (from {exemplar.name})\n```tsx\n{preview}\n```"
+                )
+
+    if not patterns_parts:
+        return {"codebase_patterns": ""}
+
+    codebase_patterns = (
+        "## Codebase Patterns (MUST follow these exactly)\n\n"
+        + "\n\n".join(patterns_parts)
+    )
+    return {"codebase_patterns": codebase_patterns}
+
+
 def decompose(state: SupervisorState, llm) -> dict:
     """Decompose the user's instruction into an ordered task plan.
 
@@ -141,11 +276,24 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
 
     task = tasks[index]
 
-    # Build context from previous task results
+    # Build context from previous task results + codebase patterns + contract
     prior_context = ""
+
+    # Inject codebase patterns (from gather_context node)
+    codebase_patterns = state.get("codebase_patterns", "")
+    if codebase_patterns:
+        prior_context += f"\n{codebase_patterns}\n"
+
+    # Inject previous task results
     for prev_task in tasks[:index]:
         if prev_task["result"]:
             prior_context += f"\n[{prev_task['worker']}]: {prev_task['result']}\n"
+
+    # Append contract block to task description (recency bias)
+    contract = extract_contract(task["description"])
+    if contract:
+        task = {**task, "description": task["description"] + contract}
+        tasks[index] = task
 
     worker_graph = worker_graphs.get(task["worker"])
     if worker_graph is None:
@@ -230,11 +378,13 @@ def build_supervisor_graph(llm=None, worker_llm=None):
 
     graph = StateGraph(SupervisorState)
     graph.add_node("decompose", decompose_node)
+    graph.add_node("gather_context", gather_context)
     graph.add_node("execute_next_task", execute_node)
     graph.add_node("validate", validate)
 
     graph.add_edge(START, "decompose")
-    graph.add_edge("decompose", "execute_next_task")
+    graph.add_edge("decompose", "gather_context")
+    graph.add_edge("gather_context", "execute_next_task")
     graph.add_conditional_edges(
         "execute_next_task",
         check_if_done,

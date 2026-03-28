@@ -151,6 +151,120 @@ class TestReport:
 # --- Parametrized mock evaluation run ---
 
 
+# --- Test new expectation types ---
+
+
+class TestNewExpectationTypes:
+    def test_command_succeeds_passes(self, tmp_path):
+        (tmp_path / "hello.py").write_text("print('hello')")
+        exp = Expectation(type="command_succeeds", value="python hello.py")
+        result = check_expectation(exp, tmp_path, [])
+        assert result.passed
+
+    def test_command_succeeds_fails(self, tmp_path):
+        exp = Expectation(type="command_succeeds", value="false")
+        result = check_expectation(exp, tmp_path, [])
+        assert not result.passed
+
+    def test_file_matches_pattern_passes(self, tmp_path):
+        (tmp_path / "route.ts").write_text("export function createTeamsRouter(pool: pg.Pool): Router {")
+        exp = Expectation(
+            type="file_matches_pattern",
+            path="route.ts",
+            value=r"export function create\w+Router\(pool",
+        )
+        result = check_expectation(exp, tmp_path, [])
+        assert result.passed
+
+    def test_file_matches_pattern_fails(self, tmp_path):
+        (tmp_path / "route.ts").write_text("export default router;")
+        exp = Expectation(
+            type="file_matches_pattern",
+            path="route.ts",
+            value=r"export function create\w+Router\(pool",
+        )
+        result = check_expectation(exp, tmp_path, [])
+        assert not result.passed
+
+    def test_file_matches_pattern_missing_file(self, tmp_path):
+        exp = Expectation(
+            type="file_matches_pattern",
+            path="missing.ts",
+            value=r"anything",
+        )
+        result = check_expectation(exp, tmp_path, [])
+        assert not result.passed
+
+
+# --- Test workspace copy ---
+
+
+class TestWorkspaceCopy:
+    def test_copy_workspace_creates_copy(self, tmp_path):
+        from shipyard.evals.runner import copy_workspace
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "file.txt").write_text("hello")
+        (src / "sub").mkdir()
+        (src / "sub" / "nested.txt").write_text("world")
+
+        dest = tmp_path / "dest"
+        copy_workspace(src, dest)
+
+        assert (dest / "file.txt").read_text() == "hello"
+        assert (dest / "sub" / "nested.txt").read_text() == "world"
+
+    def test_copy_workspace_excludes_node_modules(self, tmp_path):
+        from shipyard.evals.runner import copy_workspace
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.ts").write_text("code")
+        (src / "node_modules").mkdir()
+        (src / "node_modules" / "big.js").write_text("big")
+
+        dest = tmp_path / "dest"
+        copy_workspace(src, dest)
+
+        assert (dest / "app.ts").exists()
+        assert not (dest / "node_modules").exists()
+
+
+# --- Test contract extraction ---
+
+
+class TestContractExtraction:
+    def test_extracts_quoted_list(self):
+        from shipyard.supervisor import extract_contract
+
+        prompt = 'Use statuses ["triage", "backlog", "todo", "in_progress"]'
+        contract = extract_contract(prompt)
+        assert "triage" in contract
+        assert "backlog" in contract
+        assert "Contract" in contract
+
+    def test_extracts_field_definitions(self):
+        from shipyard.supervisor import extract_contract
+
+        prompt = "Fields: yesterday (TEXT), today (TEXT), blockers (TEXT)"
+        contract = extract_contract(prompt)
+        assert "yesterday" in contract
+
+    def test_extracts_export_pattern(self):
+        from shipyard.supervisor import extract_contract
+
+        prompt = "Export: export function createStandupsRouter(pool: pg.Pool): Router"
+        contract = extract_contract(prompt)
+        assert "createStandupsRouter" in contract
+
+    def test_returns_empty_when_no_values(self):
+        from shipyard.supervisor import extract_contract
+
+        contract = extract_contract("Just do something generic")
+        assert contract == ""
+
+
 SINGLE_AGENT_TASKS = [t for t in EVAL_TASKS if t.agent_mode == "single"]
 
 

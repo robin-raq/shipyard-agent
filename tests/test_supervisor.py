@@ -9,6 +9,8 @@ from shipyard.supervisor import (
     check_if_done,
     decompose,
     execute_next_task,
+    extract_contract,
+    gather_context,
     parse_task_plan,
     validate,
 )
@@ -226,6 +228,106 @@ class TestValidate:
         last_msg = result["messages"][-1]
         assert "Created routes" in last_msg.content
         assert "Built components" in last_msg.content
+
+
+# ---------------------------------------------------------------------------
+# Full graph compilation
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# gather_context node
+# ---------------------------------------------------------------------------
+
+class TestGatherContext:
+    def test_reads_route_exemplar(self, tmp_path):
+        """When a task mentions 'route', gather_context reads an exemplar route file."""
+        # Create a fake exemplar route
+        route_dir = tmp_path / "ship" / "api" / "src" / "routes"
+        route_dir.mkdir(parents=True)
+        (route_dir / "teams.ts").write_text(
+            'export function createTeamsRouter(pool: pg.Pool): Router {\n'
+            '  const router = Router();\n'
+            '  return router;\n'
+            '}\n'
+        )
+
+        state = {
+            "tasks": [
+                {"worker": "backend", "description": "Create a new route for standups", "status": "pending", "result": ""},
+            ],
+            "current_task_index": 0,
+            "codebase_patterns": "",
+        }
+
+        from shipyard.tools import set_workspace
+        set_workspace(tmp_path)
+        result = gather_context(state)
+        assert "createTeamsRouter" in result["codebase_patterns"]
+        assert "export function" in result["codebase_patterns"]
+
+    def test_reads_migration_exemplar(self, tmp_path):
+        """When a task mentions 'migration', gather_context reads the latest migration."""
+        mig_dir = tmp_path / "ship" / "api" / "src" / "db" / "migrations"
+        mig_dir.mkdir(parents=True)
+        (mig_dir / "001_create_users.sql").write_text(
+            "CREATE TABLE IF NOT EXISTS users (\n"
+            "  id UUID PRIMARY KEY DEFAULT gen_random_uuid()\n"
+            ");\n"
+        )
+
+        state = {
+            "tasks": [
+                {"worker": "database", "description": "Create migration for standups table", "status": "pending", "result": ""},
+            ],
+            "current_task_index": 0,
+            "codebase_patterns": "",
+        }
+
+        from shipyard.tools import set_workspace
+        set_workspace(tmp_path)
+        result = gather_context(state)
+        assert "UUID PRIMARY KEY" in result["codebase_patterns"]
+
+    def test_returns_empty_when_no_matching_files(self, tmp_path):
+        """When no exemplar files exist, returns empty patterns."""
+        state = {
+            "tasks": [
+                {"worker": "backend", "description": "Do something generic", "status": "pending", "result": ""},
+            ],
+            "current_task_index": 0,
+            "codebase_patterns": "",
+        }
+
+        from shipyard.tools import set_workspace
+        set_workspace(tmp_path)
+        result = gather_context(state)
+        assert result["codebase_patterns"] == ""
+
+
+# ---------------------------------------------------------------------------
+# extract_contract (pure function)
+# ---------------------------------------------------------------------------
+
+class TestExtractContract:
+    def test_extracts_status_list(self):
+        prompt = 'VALID_STATUSES = ["triage", "backlog", "todo", "in_progress"]'
+        contract = extract_contract(prompt)
+        assert "VALID_STATUSES" in contract
+        assert "triage" in contract
+
+    def test_extracts_multiple_patterns(self):
+        prompt = (
+            'Use statuses ["triage", "backlog"]. '
+            'Fields: yesterday (TEXT), today (TEXT). '
+            'export function createStandupsRouter(pool: pg.Pool): Router'
+        )
+        contract = extract_contract(prompt)
+        assert "triage" in contract
+        assert "yesterday" in contract
+        assert "createStandupsRouter" in contract
+
+    def test_empty_for_generic_prompt(self):
+        assert extract_contract("Just build something") == ""
 
 
 # ---------------------------------------------------------------------------

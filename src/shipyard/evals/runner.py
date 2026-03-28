@@ -1,5 +1,8 @@
 """Evaluation runner — executes tasks and checks expectations."""
 
+import re
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -65,10 +68,50 @@ def check_expectation(
             else f"Response does NOT mention '{exp.value}'"
         )
 
+    elif exp.type == "command_succeeds":
+        try:
+            result = subprocess.run(
+                exp.value,
+                shell=True,
+                cwd=workspace,
+                capture_output=True,
+                timeout=120,
+            )
+            passed = result.returncode == 0
+            detail = (
+                f"Command succeeded: {exp.value}"
+                if passed
+                else f"Command failed (exit {result.returncode}): {result.stderr.decode()[:200]}"
+            )
+        except subprocess.TimeoutExpired:
+            passed = False
+            detail = f"Command timed out: {exp.value}"
+
+    elif exp.type == "file_matches_pattern":
+        if path is None or not path.exists():
+            return ExpectationResult(exp, False, f"File not found: {exp.path}")
+        content = path.read_text()
+        passed = bool(re.search(exp.value, content))
+        detail = (
+            f"Pattern '{exp.value}' matched in {exp.path}"
+            if passed
+            else f"Pattern '{exp.value}' NOT matched in {exp.path}"
+        )
+
     else:
         return ExpectationResult(exp, False, f"Unknown expectation type: {exp.type}")
 
     return ExpectationResult(exp, passed, detail)
+
+
+def copy_workspace(src: Path, dest: Path) -> None:
+    """Copy a workspace directory, excluding heavy directories."""
+    exclude = {"node_modules", ".git", "__pycache__", "dist", "build", ".venv"}
+    shutil.copytree(
+        src, dest,
+        ignore=shutil.ignore_patterns(*exclude),
+        dirs_exist_ok=True,
+    )
 
 
 def run_task(

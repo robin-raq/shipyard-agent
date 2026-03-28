@@ -37,6 +37,7 @@ class EvalTask:
     mock_responses: list = field(default_factory=list)
     agent_mode: str = "single"
     context: str = ""
+    live: bool = False
 
 
 @dataclass
