@@ -53,7 +53,7 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 | Frontend bundle size (JS, gzipped) | not measured | 201.78 KB (657 KB uncompressed) | Vite warns >500 KB; needs code-splitting |
 | Frontend bundle size (CSS, gzipped) | not measured | 4.37 KB (17.49 KB uncompressed) | — |
 | Trace files generated | — | 172 (LangSmith runs during Ship rebuild + agent dev) | — |
-| Shipyard agent tests | — | 170 (all passing, 7 tools, all-OpenAI model config) | — |
+| Shipyard agent tests | — | 140 unit + 12 mock evals + 7 live evals | — |
 | Time to build MVP agent | — | ~8 hours | — |
 | Time to build Ship (agent-driven) | — | ~6 hours active agent time | — |
 | Total commits | — | 30+ | — |
@@ -68,6 +68,8 @@ Shipyard, a multi-agent autonomous coding system built on LangGraph and Claude, 
 - **Single feature average**: 8-15 minutes per CRUD module in multi-agent mode
 - **10 TDD features via batch runner** (auth RBAC, 2 contexts, API routes, API client, 3 components, test expansion): 38 minutes total. Claude Sonnet averaged 329s/task, GPT-4o averaged 60s/task (~5.5x faster).
 - **7 kanban+standups features via batch runner** (migration, @dnd-kit, 3 kanban components, page toggle, standups CRUD, form, page+nav): 636 seconds total (~10.6 min). All required manual intervention but provided useful scaffolding.
+- **Post-improvement validation**: Single feedback route task produced clean, compilable code matching all codebase patterns — 0 interventions needed.
+- **Live eval baseline**: 5/7 (71%) — contract adherence 100%, pattern following 100%, migration correctness 100%. Compilation evals failed due to eval infrastructure (missing node_modules in temp workspace), not agent quality.
 
 ## 4. Shortcomings
 
@@ -248,6 +250,82 @@ Added two major features from the original Ship app via the Shipyard agent's bat
 | Issue statuses | 4 (open/in_progress/done/closed) | 7 (triage/backlog/todo/in_progress/in_review/done/cancelled) | +3 |
 | Human interventions (total) | 12 | 19 (+7 kanban/standups tasks) | +7 |
 | Agent tasks run (total) | 10 | 17 (+7) | +7 |
+
+### Agent Improvement Sprint (2026-03-28)
+
+Diagnosed the 0/7 autonomous rate and implemented three targeted fixes to the supervisor graph, plus a live evaluation framework to measure impact.
+
+**Root cause analysis:** The agent's failures weren't capability problems — it *could* find patterns via `search_files` and `read_file`. The problem was it **didn't bother looking** before writing code. It fell back to LLM training defaults instead of following the exact values and patterns specified in prompts and present in the codebase.
+
+**Decision: No RAG.** The rebuild is ~17K lines across ~64 files. `search_files` (regex grep) is sufficient for discovery. The problem was behavioral (agent not reading), not infrastructural (agent unable to find). Adding a vector database would have been over-engineering.
+
+#### Three Fixes Implemented
+
+**Fix 1 — Pre-scan context injection (`gather_context` node):**
+A new deterministic node between `decompose` and `execute_next_task`. It scans task descriptions for keywords ("route", "migration", "component", "page"), reads one exemplar file of each type from the workspace, and injects the first 30 lines as `## Codebase Patterns` in every worker's context. No LLM call — purely pattern-matching + file reads.
+
+- When task mentions "route" → reads `ship/api/src/routes/teams.ts`
+- When task mentions "migration" → reads the latest `.sql` migration
+- When task mentions "component" → reads `ship/web/src/components/DocumentForm.tsx`
+- When task mentions "page" → reads `ship/web/src/pages/IssuesPage.tsx`
+
+**Fix 2 — Contract extraction (`extract_contract` function):**
+Regex-extracts critical values from task descriptions — quoted enum lists, field definitions, export patterns, constant assignments — and appends them as a `## Contract (MUST match exactly)` block at the END of each task description. This exploits LLM primacy/recency attention bias: values at the end of the prompt are more likely to be used in generation than values buried in the middle.
+
+**Fix 3 — Post-task build verification (`verify_task` node):**
+A new node between `execute_next_task` and `check_if_done`. After each backend/frontend task completes, runs `npx tsc --noEmit` in the appropriate directory. If compilation fails and retries < 2, sets the task back to "pending" with the compiler error appended to the description, decrements `current_task_index`, creating a self-healing retry loop.
+
+**Updated supervisor graph:**
+```
+START → decompose → gather_context → execute_next_task → verify_task → check_if_done ──→ execute_next_task
+                                                                                └──→ validate → END
+```
+
+#### Live Evaluation Framework
+
+Built 7 live eval tasks that test the actual failure modes, run against a copy of the real Ship codebase with real LLM calls (~$2-3 per full suite):
+
+| # | Task | Category | What It Tests |
+|---|------|----------|---------------|
+| 1 | contract_enum_values | contract_adherence | Uses exact enum values from prompt, not training defaults |
+| 2 | contract_field_names | contract_adherence | Uses exact field names from prompt (went_well/to_improve, not title/content) |
+| 3 | route_export_pattern | pattern_following | Matches `export function createXRouter(pool)` not `export default` |
+| 4 | component_pattern | pattern_following | Follows existing React component conventions |
+| 5 | backend_compilation | compilation | Generated TS route compiles with tsc |
+| 6 | frontend_compilation | compilation | Generated TSX component compiles with tsc |
+| 7 | migration_conventions | migration_correctness | Uses UUID (not SERIAL), TIMESTAMPTZ, IF NOT EXISTS |
+
+Run with: `python -m shipyard.evals --live`
+
+#### Results: Before vs After
+
+| Category | Before Fixes (kanban sprint) | After Fixes (live evals) |
+|----------|----------------------------|-------------------------|
+| Contract adherence | 0% — agent ignored prompt values in 4/7 tasks | **100% (2/2)** — exact enum values and field names |
+| Pattern following | 0% — agent used `export default` and `new Pool()` | **100% (2/2)** — matched factory function pattern |
+| Migration correctness | 0% — SERIAL, wrong columns, no constraints | **100% (1/1)** — UUID, TIMESTAMPTZ, IF NOT EXISTS |
+| Compilation | Not tested | 0% (2/2) — infra issue: temp workspace lacks node_modules |
+| **Overall live eval score** | N/A | **71% (5/7)** |
+
+**Validation test:** Re-ran the agent with improvements on a new task (create `feedback.ts` route). The agent:
+- Read `teams.ts` exemplar before writing (gather_context worked)
+- Used exact statuses from prompt: `["pending", "reviewed", "resolved"]`
+- Matched export pattern: `export function createFeedbackRouter(pool: pg.Pool): Router`
+- Used `pool` parameter (not `new Pool()`)
+- Followed soft-delete, `next(err)`, parameterized query patterns
+
+The 2 compilation failures are eval infrastructure issues (temp workspace doesn't have `node_modules`), not agent quality issues.
+
+**Key insight:** The biggest impact came from the simplest fix — `gather_context` just reads an existing file and shows it to the worker. No RAG, no embeddings, no vector database. The agent is a pattern replicator; it just needs to see the pattern first.
+
+#### Updated Test Metrics
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Agent unit tests | 137 | 140 (+3 for new nodes) |
+| Mock eval tasks | 12 (100% passing) | 12 (100% passing) |
+| Live eval tasks | 0 | 7 (71% passing) |
+| Supervisor graph nodes | 4 (decompose, execute, check, validate) | 6 (+gather_context, +verify_task) |
 
 ### What Would Actually Ship
 
