@@ -63,7 +63,16 @@ export default function AdminDashboardPage() {
       <h1 className="text-2xl font-bold mb-4">Admin Dashboard</h1>
       
       {/* Accountability Banner */}
-      {overdueItems.length > 0 && <AccountabilityBanner items={overdueItems} />}
+      {overdueItems.length > 0 && (
+        <AccountabilityBanner
+          items={overdueItems.map((item) => ({
+            id: item.id,
+            title: item.title,
+            status: item.status,
+            due_date: item.dueDate,
+          }))}
+        />
+      )}
       
       <div className="space-y-6">
         {/* Programs Overview Section */}
