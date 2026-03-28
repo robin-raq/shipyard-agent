@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
+import {
   getDoc, updateDoc, deleteDoc,
   getIssue, updateIssue, deleteIssue,
   getProject, updateProject, deleteProject,
   getWeek, updateWeek, deleteWeek,
-  getTeam, updateTeam, deleteTeam
+  getTeam, updateTeam, deleteTeam,
+  getShip, updateShip, deleteShip,
+  getProgram, updateProgram, deleteProgram
 } from '../api/client';
 import DocumentForm from '../components/DocumentForm';
 import RichTextEditor from '../components/RichTextEditor';
@@ -52,6 +54,18 @@ const API_MAP = {
     get: getTeam,
     update: updateTeam,
     delete: deleteTeam,
+    titleField: 'name',
+  },
+  ships: {
+    get: getShip,
+    update: updateShip,
+    delete: deleteShip,
+    titleField: 'name',
+  },
+  programs: {
+    get: getProgram,
+    update: updateProgram,
+    delete: deleteProgram,
     titleField: 'name',
   },
 };
