@@ -84,8 +84,12 @@ export default function DocumentDetailPage() {
   const api = type && API_MAP[type as keyof typeof API_MAP];
 
   const fetchEntity = async () => {
-    if (!id || !api) return;
-    
+    if (!id || !api) {
+      setError(`Unknown entity type: ${type}`);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
