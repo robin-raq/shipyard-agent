@@ -104,14 +104,37 @@ def check_expectation(
     return ExpectationResult(exp, passed, detail)
 
 
-def copy_workspace(src: Path, dest: Path) -> None:
-    """Copy a workspace directory, excluding heavy directories."""
-    exclude = {"node_modules", ".git", "__pycache__", "dist", "build", ".venv"}
+def copy_workspace(src: Path, dest: Path, symlink_deps: bool = True) -> None:
+    """Copy a workspace directory for isolated eval runs.
+
+    Excludes heavy directories (.git, dist, build, .venv) from the copy.
+    When symlink_deps=True, symlinks node_modules and pnpm-lock.yaml from
+    the source so tsc/vite can resolve imports without a full install.
+    """
+    exclude = {".git", "__pycache__", "dist", "build", ".venv", "node_modules"}
+
     shutil.copytree(
         src, dest,
         ignore=shutil.ignore_patterns(*exclude),
         dirs_exist_ok=True,
     )
+
+    if symlink_deps:
+        # Symlink node_modules from source so tsc/vite resolve imports
+        src_nm = src / "node_modules"
+        dest_nm = dest / "node_modules"
+        if src_nm.exists() and not dest_nm.exists():
+            dest_nm.symlink_to(src_nm)
+
+        # Also symlink any nested node_modules (monorepo workspaces)
+        for sub_nm in src.rglob("node_modules"):
+            if ".git" in sub_nm.parts:
+                continue
+            rel = sub_nm.relative_to(src)
+            dest_sub = dest / rel
+            if not dest_sub.exists():
+                dest_sub.parent.mkdir(parents=True, exist_ok=True)
+                dest_sub.symlink_to(sub_nm)
 
 
 def run_task(

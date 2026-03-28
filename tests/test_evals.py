@@ -215,7 +215,7 @@ class TestWorkspaceCopy:
         assert (dest / "file.txt").read_text() == "hello"
         assert (dest / "sub" / "nested.txt").read_text() == "world"
 
-    def test_copy_workspace_excludes_node_modules(self, tmp_path):
+    def test_copy_workspace_excludes_node_modules_when_no_symlink(self, tmp_path):
         from shipyard.evals.runner import copy_workspace
 
         src = tmp_path / "src"
@@ -225,10 +225,27 @@ class TestWorkspaceCopy:
         (src / "node_modules" / "big.js").write_text("big")
 
         dest = tmp_path / "dest"
-        copy_workspace(src, dest)
+        copy_workspace(src, dest, symlink_deps=False)
 
         assert (dest / "app.ts").exists()
         assert not (dest / "node_modules").exists()
+
+    def test_copy_workspace_symlinks_node_modules(self, tmp_path):
+        from shipyard.evals.runner import copy_workspace
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.ts").write_text("code")
+        nm = src / "node_modules"
+        nm.mkdir()
+        (nm / "react.js").write_text("react")
+
+        dest = tmp_path / "dest"
+        copy_workspace(src, dest, symlink_deps=True)
+
+        assert (dest / "app.ts").exists()
+        assert (dest / "node_modules").is_symlink()
+        assert (dest / "node_modules" / "react.js").read_text() == "react"
 
 
 # --- Test contract extraction ---

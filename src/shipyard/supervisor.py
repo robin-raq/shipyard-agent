@@ -9,6 +9,7 @@ Graph shape:
 """
 
 import json
+import os
 import re
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -276,6 +277,19 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
 
     task = tasks[index]
 
+    # Budget circuit breaker — refuse to run if cost limit exceeded
+    token_usage = dict(state.get("token_usage", {}))
+    max_cost = float(os.environ.get("SHIPYARD_MAX_COST_USD", "10.0"))
+    estimated_cost = token_usage.get("estimated_cost_usd", 0.0)
+    if estimated_cost >= max_cost:
+        tasks[index] = {
+            **task,
+            "status": "failed",
+            "result": f"Budget exceeded: ${estimated_cost:.2f} >= ${max_cost:.2f} limit. "
+                      f"Set SHIPYARD_MAX_COST_USD to increase.",
+        }
+        return {"tasks": tasks, "current_task_index": index + 1, "token_usage": token_usage}
+
     # Build context from previous task results + codebase patterns + contract
     prior_context = ""
 
@@ -304,6 +318,9 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
         }
         return {"tasks": tasks, "current_task_index": index + 1}
 
+    retry_counts = dict(state.get("retry_counts", {}))
+    task_retries = retry_counts.get(f"exec_{index}", 0)
+
     try:
         result = worker_graph.invoke({
             "messages": [HumanMessage(content=task["description"])],
@@ -311,11 +328,63 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
             "trace_steps": [],
         })
         worker_response = result["messages"][-1].content
+
+        # Detect truncated output (max_tokens hit)
+        truncation_markers = ["max_tokens", "output limit was reached", "output too long"]
+        is_truncated = any(m in worker_response.lower() for m in truncation_markers)
+
+        if is_truncated and task_retries < 1:
+            # Retry once with a simplified prompt (strip context to save tokens)
+            retry_counts[f"exec_{index}"] = task_retries + 1
+            tasks[index] = {
+                **task,
+                "status": "pending",
+                "result": "",
+                "description": (
+                    task["description"]
+                    + "\n\nIMPORTANT: Your previous attempt was truncated due to output length. "
+                    "Be more concise. Only output the essential code changes, no explanations."
+                ),
+            }
+            return {
+                "tasks": tasks,
+                "current_task_index": index,
+                "retry_counts": retry_counts,
+            }
+
+        # Track token usage (rough estimate: 4 chars ≈ 1 token)
+        total_chars = sum(len(m.content) for m in result["messages"] if hasattr(m, "content"))
+        est_tokens = total_chars // 4
+        token_usage["total_tokens"] = token_usage.get("total_tokens", 0) + est_tokens
+        # Rough cost: $3/M input + $15/M output for Claude Sonnet, ~$0.01/1K tokens average
+        token_usage["estimated_cost_usd"] = token_usage.get("estimated_cost_usd", 0.0) + (est_tokens * 0.00001)
+
         tasks[index] = {**task, "status": "done", "result": worker_response}
     except Exception as e:
-        tasks[index] = {**task, "status": "failed", "result": f"Error: {e}"}
+        error_msg = str(e)
 
-    return {"tasks": tasks, "current_task_index": index + 1}
+        # Detect token limit errors from API
+        if ("max_tokens" in error_msg.lower() or "output limit" in error_msg.lower()) and task_retries < 1:
+            retry_counts[f"exec_{index}"] = task_retries + 1
+            tasks[index] = {
+                **task,
+                "status": "pending",
+                "result": "",
+                "description": (
+                    task["description"]
+                    + "\n\nIMPORTANT: Previous attempt hit token limit. "
+                    "Be extremely concise. Minimal code only, no explanations."
+                ),
+            }
+            return {
+                "tasks": tasks,
+                "current_task_index": index,
+                "retry_counts": retry_counts,
+            }
+
+        tasks[index] = {**task, "status": "failed", "result": f"Error: {error_msg}"}
+
+    return {"tasks": tasks, "current_task_index": index + 1, "token_usage": token_usage}
 
 
 def verify_task(state: SupervisorState) -> dict:

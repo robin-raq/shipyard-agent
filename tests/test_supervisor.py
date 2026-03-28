@@ -208,6 +208,63 @@ class TestExecuteNextTask:
         assert result["current_task_index"] == 1
 
 
+    def test_budget_exceeded_skips_task(self):
+        """When estimated cost exceeds limit, task should be marked failed."""
+        state = {
+            "messages": [HumanMessage(content="Build something")],
+            "tasks": [
+                {"worker": "backend", "description": "Create route", "status": "pending", "result": ""},
+            ],
+            "current_task_index": 0,
+            "context": "",
+            "trace_steps": [],
+            "codebase_patterns": "",
+            "retry_counts": {},
+            "token_usage": {"estimated_cost_usd": 15.0, "total_tokens": 1500000},
+        }
+
+        import os
+        old = os.environ.get("SHIPYARD_MAX_COST_USD")
+        os.environ["SHIPYARD_MAX_COST_USD"] = "10.0"
+        try:
+            result = execute_next_task(state, {"backend": MagicMock()})
+            assert result["tasks"][0]["status"] == "failed"
+            assert "Budget exceeded" in result["tasks"][0]["result"]
+        finally:
+            if old is None:
+                os.environ.pop("SHIPYARD_MAX_COST_USD", None)
+            else:
+                os.environ["SHIPYARD_MAX_COST_USD"] = old
+
+    def test_truncated_output_retries(self):
+        """When worker output contains truncation marker, should retry once."""
+        mock_worker_graph = MagicMock()
+        mock_worker_graph.invoke.return_value = {
+            "messages": [
+                AIMessage(content="Partial output... max_tokens or model output limit was reached"),
+            ],
+        }
+
+        state = {
+            "messages": [HumanMessage(content="Build feature")],
+            "tasks": [
+                {"worker": "backend", "description": "Create route", "status": "pending", "result": ""},
+            ],
+            "current_task_index": 0,
+            "context": "",
+            "trace_steps": [],
+            "codebase_patterns": "",
+            "retry_counts": {},
+            "token_usage": {},
+        }
+
+        result = execute_next_task(state, {"backend": mock_worker_graph})
+        # Should retry: status back to pending, index stays at 0
+        assert result["tasks"][0]["status"] == "pending"
+        assert result["current_task_index"] == 0
+        assert "concise" in result["tasks"][0]["description"].lower()
+
+
 # ---------------------------------------------------------------------------
 # validate node
 # ---------------------------------------------------------------------------
