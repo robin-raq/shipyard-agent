@@ -18,8 +18,8 @@ ROLE_MODEL_MAP: dict[str, str] = {
     "supervisor": "openai",
     "shared": "openai",
     "database": "openai",
-    "backend": "anthropic",
-    "frontend": "anthropic",
+    "backend": "openai",
+    "frontend": "openai",
 }
 
 
@@ -40,6 +40,6 @@ def get_llm_for_role(role: str, force_provider: str | None = None):
         provider = "anthropic"
 
     if provider == "openai":
-        return ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        return ChatOpenAI(model="gpt-4o", temperature=0)
 
     return ChatAnthropic(model="claude-sonnet-4-5-20250929", temperature=0)

@@ -5,11 +5,11 @@ conditional routing. The agent node calls Claude, the tools node
 executes tool calls, and should_continue routes between them.
 """
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from shipyard.models import get_llm_for_role
 from shipyard.prompts import build_system_prompt
 from shipyard.state import AgentState
 from shipyard.tools import ALL_TOOLS
@@ -20,7 +20,7 @@ def build_graph(llm=None):
 
     Args:
         llm: Optional language model (with tools bound). If None,
-             creates a ChatAnthropic instance. Pass a mock for testing.
+             creates an LLM via get_llm_for_role. Pass a mock for testing.
 
     Graph structure:
         START → agent → should_continue → tools | END
@@ -32,7 +32,7 @@ def build_graph(llm=None):
     if llm is not None:
         bound_llm = llm
     else:
-        model = ChatAnthropic(model="claude-sonnet-4-5-20250929", temperature=0)
+        model = get_llm_for_role("backend")
         bound_llm = model.bind_tools(ALL_TOOLS)
 
     def agent_node(state: AgentState) -> dict:

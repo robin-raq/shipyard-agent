@@ -29,13 +29,13 @@ class TestGetLlmForRole:
         """Database worker (SQL/migrations) should use the cost-efficient model."""
         assert ROLE_MODEL_MAP["database"] == "openai"
 
-    def test_backend_uses_anthropic(self):
-        """Backend worker (complex editing) should use Claude."""
-        assert ROLE_MODEL_MAP["backend"] == "anthropic"
+    def test_backend_uses_openai(self):
+        """Backend worker should use OpenAI to stay within budget."""
+        assert ROLE_MODEL_MAP["backend"] == "openai"
 
-    def test_frontend_uses_anthropic(self):
-        """Frontend worker (complex editing) should use Claude."""
-        assert ROLE_MODEL_MAP["frontend"] == "anthropic"
+    def test_frontend_uses_openai(self):
+        """Frontend worker should use OpenAI to stay within budget."""
+        assert ROLE_MODEL_MAP["frontend"] == "openai"
 
     @patch.dict(os.environ, _ENV_PATCH)
     def test_unknown_role_defaults_to_anthropic(self):

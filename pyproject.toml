@@ -28,4 +28,5 @@ where = ["src"]
 testpaths = ["tests"]
 markers = [
     "integration: tests that require API keys (deselect with '-m not integration')",
+    "slow: tests that take >30s to run (deselect with '-m not slow')",
 ]

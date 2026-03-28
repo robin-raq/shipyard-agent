@@ -8,6 +8,7 @@ the workspace root are rejected.
 """
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -20,7 +21,8 @@ from langchain_core.tools import tool
 
 _workspace_root: Path = Path.cwd()
 
-MAX_READ_LINES = 500
+MAX_READ_LINES = 2000
+COMMAND_TIMEOUT = 120
 
 
 def set_workspace(root: Path) -> None:
@@ -314,7 +316,7 @@ def run_command(command: str) -> str:
             args,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=COMMAND_TIMEOUT,
             cwd=str(_workspace_root),
         )
         parts = []
@@ -326,11 +328,134 @@ def run_command(command: str) -> str:
         return "\n".join(parts)
 
     except subprocess.TimeoutExpired:
-        return f"Error: Command timed out after 30 seconds: {command}"
+        return f"Error: Command timed out after {COMMAND_TIMEOUT} seconds: {command}"
+
+
+# ---------------------------------------------------------------------------
+# search_files
+# ---------------------------------------------------------------------------
+
+_SKIP_EXTENSIONS = frozenset({
+    ".bin", ".exe", ".dll", ".so", ".dylib", ".png", ".jpg", ".jpeg",
+    ".gif", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot",
+    ".zip", ".tar", ".gz", ".bz2", ".pdf", ".mp3", ".mp4",
+})
+
+MAX_SEARCH_RESULTS = 100
+
+
+def _is_binary(path: Path) -> bool:
+    """Quick check: skip known binary extensions or files with null bytes."""
+    if path.suffix.lower() in _SKIP_EXTENSIONS:
+        return True
+    try:
+        chunk = path.read_bytes()[:512]
+        return b"\x00" in chunk
+    except (OSError, PermissionError):
+        return True
+
+
+@tool
+def search_files(pattern: str, glob: str = "", directory: str = "") -> str:
+    """Search for a regex pattern across all text files in the workspace.
+
+    Args:
+        pattern: Regular expression to search for.
+        glob: Optional glob filter (e.g., '*.py', '*.ts'). If empty, searches all files.
+        directory: Optional subdirectory to search in. Defaults to workspace root.
+
+    Returns:
+        Matching lines with file paths and line numbers, or a no-matches message.
+    """
+    if directory:
+        search_root = _resolve_safe(directory)
+        if search_root is None:
+            return f"Error: Path is outside the workspace: {directory}"
+        if not search_root.is_dir():
+            return f"Error: Not a directory: {directory}"
+    else:
+        search_root = _workspace_root
+
+    try:
+        regex = re.compile(pattern)
+    except re.error as e:
+        return f"Error: Invalid regex pattern: {e}"
+
+    if glob:
+        files = sorted(search_root.rglob(glob))
+    else:
+        files = sorted(search_root.rglob("*"))
+
+    matches = []
+    for f in files:
+        if not f.is_file() or _is_binary(f):
+            continue
+        try:
+            lines = f.read_text(errors="replace").splitlines()
+        except (OSError, PermissionError):
+            continue
+        rel = f.relative_to(_workspace_root)
+        for i, line in enumerate(lines, 1):
+            if regex.search(line):
+                matches.append(f"{rel}:{i}: {line}")
+                if len(matches) >= MAX_SEARCH_RESULTS:
+                    matches.append(
+                        f"\n[Truncated: showing first {MAX_SEARCH_RESULTS} matches]"
+                    )
+                    return "\n".join(matches)
+
+    if not matches:
+        return f"No matches found for pattern: {pattern}"
+    return "\n".join(matches)
+
+
+# ---------------------------------------------------------------------------
+# scan_workspace
+# ---------------------------------------------------------------------------
+
+_EXCLUDED_DIRS = frozenset({
+    "node_modules", ".git", "__pycache__", ".venv", "venv",
+    ".next", "dist", "build", ".tox", ".mypy_cache", ".pytest_cache",
+    ".bak",
+})
+
+
+@tool
+def scan_workspace(max_depth: int = 4) -> str:
+    """Scan the workspace and return a directory tree.
+
+    Args:
+        max_depth: Maximum directory depth to traverse (default 4).
+
+    Returns:
+        An indented directory tree showing files and folders.
+    """
+    lines = []
+
+    def _walk(directory: Path, prefix: str, depth: int):
+        if depth > max_depth:
+            return
+        try:
+            entries = sorted(directory.iterdir(), key=lambda e: (not e.is_dir(), e.name))
+        except PermissionError:
+            return
+
+        dirs = [e for e in entries if e.is_dir() and e.name not in _EXCLUDED_DIRS]
+        files = [e for e in entries if e.is_file() and not e.name.endswith(".bak")]
+
+        for f in files:
+            lines.append(f"{prefix}{f.name}")
+        for d in dirs:
+            lines.append(f"{prefix}{d.name}/")
+            _walk(d, prefix + "  ", depth + 1)
+
+    lines.append(f"{_workspace_root.name}/")
+    _walk(_workspace_root, "  ", 1)
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
 # Tool registry (for agent.py to import)
 # ---------------------------------------------------------------------------
 
-ALL_TOOLS = [read_file, create_file, list_files, edit_file, run_command]
+ALL_TOOLS = [read_file, create_file, list_files, edit_file, run_command, search_files, scan_workspace]

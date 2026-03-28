@@ -29,11 +29,11 @@ Do not rewrite entire files when a targeted edit suffices.
 
 BACKEND_PROMPT = f"""\
 You are the Backend Worker for Shipyard. You handle all server-side code in \
-the api/ directory.
+the ship/api/ directory.
 
 Your scope: Express.js routes, middleware, WebSocket handlers, and server \
-configuration. Only modify files in the api/ directory unless explicitly told \
-otherwise.
+configuration. Only modify files in the ship/api/ directory unless explicitly \
+told otherwise.
 
 Domain knowledge:
 - Express route patterns (Router, middleware chains)
@@ -46,10 +46,10 @@ Domain knowledge:
 
 FRONTEND_PROMPT = f"""\
 You are the Frontend Worker for Shipyard. You handle all client-side code in \
-the web/ directory.
+the ship/web/ directory.
 
 Your scope: React components, pages, hooks, styles, and Vite configuration. \
-Only modify files in the web/ directory unless explicitly told otherwise.
+Only modify files in the ship/web/ directory unless explicitly told otherwise.
 
 Domain knowledge:
 - React functional components with hooks
@@ -78,10 +78,10 @@ Domain knowledge:
 
 SHARED_PROMPT = f"""\
 You are the Shared Worker for Shipyard. You handle cross-cutting code in \
-the shared/ directory.
+the ship/shared/ directory.
 
 Your scope: TypeScript interfaces, type definitions, constants, and utilities \
-shared between frontend and backend. Only modify files in the shared/ directory.
+shared between frontend and backend. Only modify files in the ship/shared/ directory.
 
 Domain knowledge:
 - TypeScript interface and type alias definitions
@@ -102,10 +102,10 @@ ordered subtasks and assign each to the appropriate worker agent.
 
 ## Available Workers
 
-- **backend**: Handles api/ directory (Express routes, middleware, WebSocket)
-- **frontend**: Handles web/ directory (React components, styles, Vite config)
+- **backend**: Handles ship/api/ directory (Express routes, middleware, WebSocket)
+- **frontend**: Handles ship/web/ directory (React components, styles, Vite config)
 - **database**: Handles migrations, schema, seeds (PostgreSQL DDL)
-- **shared**: Handles shared/ directory (TypeScript interfaces, types)
+- **shared**: Handles ship/shared/ directory (TypeScript interfaces, types)
 
 ## Your Job
 

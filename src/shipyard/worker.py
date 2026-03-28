@@ -6,11 +6,11 @@ by role and system prompt. Uses closures instead of module-level
 globals so multiple workers can coexist without interference.
 """
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from shipyard.models import get_llm_for_role
 from shipyard.state import AgentState
 from shipyard.tools import ALL_TOOLS
 
@@ -21,7 +21,7 @@ def build_worker_graph(role: str, system_prompt: str, llm=None):
     Args:
         role: Worker role name (e.g., "backend", "frontend").
         system_prompt: Role-specific system prompt.
-        llm: Optional LLM with tools bound. If None, creates ChatAnthropic.
+        llm: Optional LLM with tools bound. If None, creates via get_llm_for_role.
 
     Returns:
         A compiled LangGraph StateGraph ready for .invoke().
@@ -29,7 +29,7 @@ def build_worker_graph(role: str, system_prompt: str, llm=None):
     if llm is not None:
         bound_llm = llm
     else:
-        model = ChatAnthropic(model="claude-sonnet-4-5-20250929", temperature=0)
+        model = get_llm_for_role(role)
         bound_llm = model.bind_tools(ALL_TOOLS)
 
     def worker_agent_node(state: AgentState) -> dict:

@@ -1,5 +1,6 @@
-"""Tests for the 5 core tools: read_file, create_file, list_files, edit_file, run_command."""
+"""Tests for core tools: read_file, create_file, list_files, edit_file, run_command, search_files, scan_workspace."""
 
+import pytest
 from pathlib import Path
 
 from shipyard.tools import (
@@ -8,9 +9,12 @@ from shipyard.tools import (
     list_files,
     edit_file,
     run_command,
+    search_files,
+    scan_workspace,
     set_workspace,
     _resolve_safe,
     ALLOWED_PROGRAMS,
+    COMMAND_TIMEOUT,
     MAX_READ_LINES,
 )
 
@@ -233,9 +237,10 @@ class TestRunCommand:
         result = run_command.invoke({"command": "node --version"})
         assert "not allowed" not in result.lower()
 
+    @pytest.mark.slow
     def test_has_timeout(self):
-        # sleep 60 should be killed by the 30s timeout
-        result = run_command.invoke({"command": "sleep 60"})
+        # sleep 200 should be killed by the 120s timeout
+        result = run_command.invoke({"command": "sleep 200"})
         assert "timeout" in result.lower() or "timed out" in result.lower()
 
     def test_allowlist_contains_essential_programs(self):
@@ -293,3 +298,98 @@ class TestWorkspaceSandbox:
         """Relative paths should be resolved relative to the workspace root."""
         result = _resolve_safe("hello.py")
         assert result == workspace / "hello.py"
+
+
+# ---------------------------------------------------------------------------
+# search_files
+# ---------------------------------------------------------------------------
+
+class TestSearchFiles:
+    def test_finds_matching_lines(self, workspace: Path):
+        result = search_files.invoke({"pattern": "def greet"})
+        assert "hello.py" in result
+        assert "def greet" in result
+
+    def test_returns_line_numbers(self, workspace: Path):
+        result = search_files.invoke({"pattern": "def greet"})
+        assert "1:" in result
+
+    def test_no_matches_returns_message(self, workspace: Path):
+        result = search_files.invoke({"pattern": "zzz_nonexistent_zzz"})
+        assert "no matches" in result.lower()
+
+    def test_searches_nested_directories(self, workspace: Path):
+        nested = workspace / "src" / "deep.py"
+        nested.parent.mkdir(parents=True)
+        nested.write_text("SECRET_KEY = 'abc123'\n")
+        result = search_files.invoke({"pattern": "SECRET_KEY"})
+        assert "deep.py" in result
+
+    def test_regex_pattern(self, workspace: Path):
+        (workspace / "nums.py").write_text("x = 42\ny = 99\nz = hello\n")
+        result = search_files.invoke({"pattern": r"= \d+"})
+        assert "42" in result
+        assert "99" in result
+
+    def test_glob_filter(self, workspace: Path):
+        (workspace / "app.js").write_text("const x = 1;\n")
+        (workspace / "app.py").write_text("x = 1\n")
+        result = search_files.invoke({"pattern": "x = 1", "glob": "*.py"})
+        assert "app.py" in result
+        assert "app.js" not in result
+
+    def test_rejects_outside_workspace(self, workspace: Path):
+        result = search_files.invoke({"pattern": "root", "directory": "/etc"})
+        assert "error" in result.lower()
+
+    def test_binary_files_skipped(self, workspace: Path):
+        (workspace / "image.bin").write_bytes(b"\x00\x01\x02\xff" * 100)
+        result = search_files.invoke({"pattern": ".*"})
+        assert "image.bin" not in result
+
+
+# ---------------------------------------------------------------------------
+# scan_workspace
+# ---------------------------------------------------------------------------
+
+class TestScanWorkspace:
+    def test_returns_tree(self, workspace: Path):
+        result = scan_workspace.invoke({})
+        assert "hello.py" in result
+
+    def test_shows_nested_structure(self, workspace: Path):
+        (workspace / "src" / "api").mkdir(parents=True)
+        (workspace / "src" / "api" / "routes.py").write_text("# routes\n")
+        result = scan_workspace.invoke({})
+        assert "src" in result
+        assert "routes.py" in result
+
+    def test_respects_max_depth(self, workspace: Path):
+        deep = workspace / "a" / "b" / "c" / "d" / "e" / "f"
+        deep.mkdir(parents=True)
+        (deep / "deep.txt").write_text("deep\n")
+        result = scan_workspace.invoke({"max_depth": 2})
+        assert "a" in result
+        # Depth 6 file shouldn't appear with max_depth=2
+        assert "deep.txt" not in result
+
+    def test_excludes_common_dirs(self, workspace: Path):
+        (workspace / "node_modules").mkdir()
+        (workspace / "node_modules" / "pkg.js").write_text("// pkg\n")
+        (workspace / ".git").mkdir()
+        (workspace / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        result = scan_workspace.invoke({})
+        assert "pkg.js" not in result
+        assert "HEAD" not in result
+
+
+# ---------------------------------------------------------------------------
+# Updated constants
+# ---------------------------------------------------------------------------
+
+class TestUpdatedConstants:
+    def test_max_read_lines_is_2000(self):
+        assert MAX_READ_LINES == 2000
+
+    def test_command_timeout_is_120(self):
+        assert COMMAND_TIMEOUT == 120
