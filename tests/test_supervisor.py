@@ -570,14 +570,34 @@ class TestVerifyTask:
         assert result["tasks"][0]["status"] == "failed"
 
     @patch("shipyard.supervisor.subprocess.run")
-    def test_runs_vitest_after_tsc_passes(self, mock_run, tmp_path):
-        """When tsc passes, vitest should also run."""
+    def test_runs_tsc_for_edited_files(self, mock_run, tmp_path):
+        """When worker edited existing files, tsc should run."""
         from shipyard.tools import set_workspace
         api_dir = tmp_path / "ship" / "api"
         api_dir.mkdir(parents=True)
         set_workspace(tmp_path)
 
-        # tsc passes (returncode 0), then vitest passes (returncode 0)
+        mock_run.return_value = MagicMock(returncode=0, stderr=b"", stdout=b"")
+
+        state = {
+            "tasks": [
+                {"worker": "backend", "description": "Fix route", "status": "done", "result": "Edited ship/api/src/routes/teams.ts."},
+            ],
+            "current_task_index": 1,
+            "retry_counts": {},
+        }
+        result = verify_task(state)
+        assert result["tasks"][0]["status"] == "done"
+        assert mock_run.call_count == 1  # tsc only (no test files mentioned)
+
+    @patch("shipyard.supervisor.subprocess.run")
+    def test_runs_vitest_when_tests_created(self, mock_run, tmp_path):
+        """When worker created test files, vitest should also run."""
+        from shipyard.tools import set_workspace
+        api_dir = tmp_path / "ship" / "api"
+        api_dir.mkdir(parents=True)
+        set_workspace(tmp_path)
+
         mock_run.side_effect = [
             MagicMock(returncode=0, stderr=b"", stdout=b""),  # tsc
             MagicMock(returncode=0, stderr=b"", stdout=b"Tests passed"),  # vitest
@@ -585,7 +605,7 @@ class TestVerifyTask:
 
         state = {
             "tasks": [
-                {"worker": "backend", "description": "Create route", "status": "done", "result": "Done."},
+                {"worker": "backend", "description": "Fix route", "status": "done", "result": "Edited route and created test file standups.test.ts."},
             ],
             "current_task_index": 1,
             "retry_counts": {},
@@ -594,31 +614,38 @@ class TestVerifyTask:
         assert result["tasks"][0]["status"] == "done"
         assert mock_run.call_count == 2  # tsc + vitest
 
-    @patch("shipyard.supervisor.subprocess.run")
-    def test_retries_on_vitest_failure(self, mock_run, tmp_path):
-        """When tsc passes but vitest fails, task should be retried."""
-        from shipyard.tools import set_workspace
-        api_dir = tmp_path / "ship" / "api"
-        api_dir.mkdir(parents=True)
-        set_workspace(tmp_path)
-
-        # tsc passes, vitest fails
-        mock_run.side_effect = [
-            MagicMock(returncode=0, stderr=b"", stdout=b""),  # tsc
-            MagicMock(returncode=1, stderr=b"FAIL src/routes/standups.test.ts\nExpected 200, got 404", stdout=b""),  # vitest
-        ]
-
+    def test_skips_verification_for_new_files_only(self):
+        """When worker only created new files, skip full verification."""
         state = {
             "tasks": [
-                {"worker": "backend", "description": "Create route", "status": "done", "result": "Done."},
+                {"worker": "backend", "description": "Create route", "status": "done", "result": "Created ship/api/src/routes/feedback.ts."},
             ],
             "current_task_index": 1,
             "retry_counts": {},
         }
         result = verify_task(state)
-        # Task should be set back to pending for retry
+        assert result["tasks"][0]["status"] == "done"
+
+    @patch("shipyard.supervisor.subprocess.run")
+    def test_retries_on_tsc_failure(self, mock_run, tmp_path):
+        """When tsc fails on edited files, task should be retried."""
+        from shipyard.tools import set_workspace
+        api_dir = tmp_path / "ship" / "api"
+        api_dir.mkdir(parents=True)
+        set_workspace(tmp_path)
+
+        mock_run.return_value = MagicMock(returncode=1, stderr=b"error TS2345: Argument not assignable", stdout=b"")
+
+        state = {
+            "tasks": [
+                {"worker": "backend", "description": "Fix route", "status": "done", "result": "Edited ship/api/src/routes/teams.ts."},
+            ],
+            "current_task_index": 1,
+            "retry_counts": {},
+        }
+        result = verify_task(state)
         assert result["tasks"][0]["status"] == "pending"
-        assert "FAIL" in result["tasks"][0]["description"]
+        assert "TS2345" in result["tasks"][0]["description"]
 
 
 class TestCrossBoundaryCheck:
