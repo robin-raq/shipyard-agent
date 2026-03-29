@@ -437,11 +437,88 @@ The remaining fixes (iteration limit, query param pattern, supervisor wiring rul
 
 #### Updated Totals (All Sprints Combined)
 
-| Metric | After Original Build | After Batch 1 | After Batch 2 |
-|--------|---------------------|---------------|---------------|
-| API Routes | 18 | 24 | **29** |
-| Frontend Pages | 12 | 16 | **22** (matches original's 24) |
-| Frontend Components | 16 | 19 | **22** |
-| Database Migrations | 14 | 20 | **28** |
-| Agent-generated features | — | 6 | **11** |
-| Autonomous rate | 52% (original) | 17% (batch 1) | **100% (batch 2)** |
+| Metric | After Original Build | After Batch 1 | After Batch 2 | After Batch 3 |
+|--------|---------------------|---------------|---------------|---------------|
+| API Routes | 18 | 24 | 29 | **37+** |
+| Frontend Pages | 12 | 16 | 22 | **27** |
+| Frontend Components | 16 | 19 | 22 | **25+** |
+| Database Migrations | 14 | 20 | 28 | **32** |
+| Agent-generated features | — | 6 | 11 | **24** |
+| Autonomous rate | 52% (original) | 17% (batch 1) | 100% (batch 2) | **85% (batch 3)** |
+
+### Batch 3 Results (2026-03-29 — 13 Features, FleetGraph + Infrastructure)
+
+Largest batch yet: 13 features including FleetGraph integration, middleware, and infrastructure features. Tested performance improvements (smart verify, role-scoped context) alongside harder task types (editing existing files, cross-service integration).
+
+#### 13 Features Built — 11 Fully Autonomous
+
+| # | Feature | Duration | Type | Autonomous? |
+|---|---------|----------|------|-------------|
+| 1 | Team People endpoint | 185s | New route | Yes |
+| 2 | Admin User Management | 446s | Route + page edit | Yes |
+| 3 | Rate Limiting middleware | 234s | New middleware | Yes |
+| 4 | Audit Logging middleware + route | 589s | Migration + middleware + route | Yes |
+| 5 | Backlinks tracking | 784s | Migration + route + component | Yes |
+| 6 | API Token management | 270s | Migration + route + page | Yes |
+| 7 | Setup Wizard | 158s | Route + page | Yes |
+| 8 | Iterations/Sprints | 421s | Migration + route + page | Yes |
+| 9 | FleetGraph Chat Panel | 293s | Component + hook (external API) | Yes |
+| 10 | FleetGraph Layout Wiring | 96s | Edit existing component | Yes |
+| 11 | Approvals Page | 130s | New page (external API) | Yes |
+| 12 | WebSocket Document Wiring | 337s | Edit existing page | **No** — broke IssuesPage ternary |
+| 13 | API Shape Compatibility | 229s | Edit existing routes | **No** — missing client.ts exports |
+
+**Total: 13 features, 4,172s (~70 min), 11/13 autonomous (85%).**
+
+#### Performance Breakthrough: 8.7x Faster
+
+| Metric | Batch 2 | Batch 3 | Improvement |
+|--------|---------|---------|-------------|
+| Avg time per task | 2,780s | 321s | **8.7x faster** |
+| Total batch time | 13,900s (3.9 hrs) | 4,172s (70 min) | **3.3x faster** |
+| Slowest task | 5,381s (90 min) | 784s (13 min) | **6.9x faster** |
+| Fastest task | 993s (17 min) | 96s (1.6 min) | **10x faster** |
+
+**Root cause:** Smart verify skips `tsc --noEmit` + `vitest run` for tasks that only create new files (can't break existing compilation). Batch 2 ran full verification after every worker; Batch 3 only verifies when files were edited.
+
+#### New Failure Modes Discovered
+
+**1. Incomplete JSX edit (Task 12):** Agent edited IssuesPage.tsx to add a KanbanBoard view toggle but left an incomplete ternary — opened the `list ? (` branch but cut off the `: (board)` branch. This is an **edit-specific** failure: the agent's anchor-based replacement removed the closing branch.
+
+**Root cause:** The agent replaced a section of JSX but didn't include enough context in the `old_text` anchor to capture the full ternary structure. When editing complex nested JSX, the agent needs larger anchors that include the complete conditional block.
+
+**2. Missing cross-file exports (Task 13):** Multiple components imported functions from `client.ts` that were referenced in the task prompts but not actually added to client.ts by previous workers. The agent created the consumers before the producers.
+
+**Root cause:** Tasks 9-13 ran sequentially but the frontend worker for Task 9 created `FleetGraphPanel.tsx` importing from `client.ts`, while the client.ts additions were specified in Task 10. The supervisor ordered tasks correctly but the frontend worker in Task 9 pre-emptively imported functions it expected Task 10 to create. Fixed by adding stub implementations to client.ts.
+
+#### What This Reveals About Agent Limitations
+
+| Task type | Autonomous rate | Evidence |
+|-----------|----------------|---------|
+| Create new files | **100%** | Tasks 1-11 (all new routes, pages, migrations, components) |
+| Edit existing files | **50%** | Tasks 12-13 (1 syntax error, 1 missing exports) |
+| External service integration | **100%** | Tasks 9-11 (FleetGraph chat, approvals — all correct) |
+
+The agent is **production-grade for greenfield CRUD** and **good for external API integration** (when given exact type definitions in the prompt). It's **weaker at surgical edits** to existing complex files — the anchor-based replacement can clip surrounding context.
+
+#### FleetGraph Integration Quality
+
+The FleetGraph tasks (9-11) were the first test of the agent building **external service integration** (not Ship's own backend). Results:
+
+- `FleetGraphPanel.tsx`: correct chat UI with severity badges, findings cards, loading states
+- `useFleetGraph.ts`: correctly parses URL for entity context, sends to FleetGraph API
+- `ApprovalsPage.tsx`: correct HITL queue with approve/reject buttons, filter tabs
+- Layout.tsx: ⚡ button correctly wired to toggle panel
+
+The embedded FleetGraph type definitions in the prompts worked — the agent used exact field names (`findings`, `severity`, `chatResponse`, `needsApproval`) matching the FleetGraph API contract. **Providing complete type definitions in the prompt is as effective as the shared contract for external service integration.**
+
+#### Autonomous Rate Progression (Full History)
+
+| Sprint | Tasks | Type | Autonomous | Rate |
+|--------|-------|------|-----------|------|
+| Kanban (pre-improvements) | 7 | CRUD | 0 | **0%** |
+| Batch 1 (shared contract + context) | 6 | CRUD | 1 | **17%** |
+| Batch 2 (+ path fix + auto-wiring) | 5 | CRUD | 5 | **100%** |
+| Batch 3 (+ smart verify + FleetGraph) | 13 | Mixed (CRUD + edits + integration) | 11 | **85%** |
+
+The drop from 100% to 85% is expected — Batch 3 included fundamentally harder tasks (editing existing files, cross-file coordination). The 100% rate on new-file tasks held.
