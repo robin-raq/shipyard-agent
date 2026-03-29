@@ -12,7 +12,20 @@ export function createIssuesRouter(pool: pg.Pool): Router {
     try {
       const { status, priority, assignee_id } = req.query;
 
-      let query = "SELECT * FROM issues WHERE deleted_at IS NULL";
+      let query = `
+        SELECT 
+          i.id,
+          i.title,
+          i.status AS state,
+          i.priority,
+          i.assignee_id,
+          COALESCE(u.display_name, u.username, u.email) AS assignee_name,
+          i.updated_at,
+          i.created_at,
+          NULL::DATE AS due_date
+        FROM issues i
+        LEFT JOIN users u ON i.assignee_id = u.id
+        WHERE i.deleted_at IS NULL`;
       const params: string[] = [];
       let paramCount = 1;
 
@@ -24,7 +37,7 @@ export function createIssuesRouter(pool: pg.Pool): Router {
             status: 400,
           });
         }
-        query += ` AND status = $${paramCount++}`;
+        query += ` AND i.status = $${paramCount++}`;
         params.push(status as string);
       }
 
@@ -36,16 +49,16 @@ export function createIssuesRouter(pool: pg.Pool): Router {
             status: 400,
           });
         }
-        query += ` AND priority = $${paramCount++}`;
+        query += ` AND i.priority = $${paramCount++}`;
         params.push(priority as string);
       }
 
       if (assignee_id) {
-        query += ` AND assignee_id = $${paramCount++}`;
+        query += ` AND i.assignee_id = $${paramCount++}`;
         params.push(assignee_id as string);
       }
 
-      query += " ORDER BY created_at DESC";
+      query += " ORDER BY i.created_at DESC";
 
       const result = await pool.query(query, params);
       res.status(200).json(result.rows);

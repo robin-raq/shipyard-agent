@@ -55,7 +55,7 @@ export default function ProfilePage() {
     setIsEditing(false);
   };
 
-  const onSubmit = async (e: FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const updated = await updateProfile({

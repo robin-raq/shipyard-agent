@@ -7,7 +7,18 @@ export function createWeeksRouter(pool: pg.Pool): Router {
   // GET / - list all weeks
   router.get("/", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const query = "SELECT * FROM weeks WHERE deleted_at IS NULL ORDER BY created_at DESC";
+      const query = `
+        SELECT 
+          w.id,
+          w.title,
+          w.status,
+          w.start_date,
+          w.end_date,
+          EXISTS(SELECT 1 FROM weekly_plans WHERE week_id = w.id) AS has_plan
+        FROM weeks w
+        WHERE w.deleted_at IS NULL
+        ORDER BY w.created_at DESC
+      `;
       const result = await pool.query(query);
       res.status(200).json(result.rows);
     } catch (err) {
@@ -34,6 +45,30 @@ export function createWeeksRouter(pool: pg.Pool): Router {
       }
 
       res.status(200).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /:id/standups - list standups for a given week
+  router.get("/:id/standups", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = req.params.id as string;
+
+      const query = `
+        SELECT 
+          s.*, 
+          u.username AS user_name
+        FROM standups s
+        JOIN users u ON s.user_id = u.id
+        JOIN weeks w ON w.id = $1
+        WHERE s.deleted_at IS NULL
+          AND s.standup_date BETWEEN w.start_date AND w.end_date
+        ORDER BY s.standup_date DESC
+      `;
+
+      const result = await pool.query(query, [id]);
+      return res.status(200).json(result.rows);
     } catch (err) {
       next(err);
     }

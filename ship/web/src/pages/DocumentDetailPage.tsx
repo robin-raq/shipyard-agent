@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useWebSocket } from '../hooks/useWebSocket';
 import {
   getDoc, updateDoc, deleteDoc,
   getIssue, updateIssue, deleteIssue,
@@ -80,6 +82,25 @@ export default function DocumentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+
+  const { user } = useAuth();
+
+  // Real-time collaboration via WebSocket (graceful degradation on errors)
+  let wsConnected = false;
+  let wsActiveUsers: { userId?: string; username?: string }[] = [];
+  let wsOk = true;
+  try {
+    const ws = useWebSocket({
+      documentId: id || 'unknown',
+      userId: user?.id,
+      username: (user?.display_name || user?.username) ?? undefined,
+    });
+    wsConnected = ws.connected;
+    wsActiveUsers = ws.activeUsers || [];
+  } catch (e) {
+    // If the hook fails (e.g., WS unsupported), do not render the indicator
+    wsOk = false;
+  }
 
   const api = type && API_MAP[type as keyof typeof API_MAP];
 
@@ -231,9 +252,59 @@ export default function DocumentDetailPage() {
               </div>
             </header>
 
+            {/* Active Users indicator */}
+            {wsOk && (
+              <div className="mb-4 flex items-center justify-between" aria-live="polite">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-flex h-2 w-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+                      aria-hidden="true"
+                    />
+                    <span className="text-sm text-gray-700">
+                      {wsConnected ? 'Connected' : 'Offline'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Active Users</span>
+                    <div className="flex -space-x-2">
+                      {wsConnected && wsActiveUsers.slice(0, 5).map((u, idx) => {
+                        const name = u.username || 'User';
+                        const initials = name
+                          .split(' ')
+                          .map((p) => p[0])
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase();
+                        return (
+                          <div
+                            key={`${u.userId || name}-${idx}`}
+                            title={name}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-500 text-white text-xs ring-2 ring-white"
+                            aria-label={`Active: ${name}`}
+                          >
+                            {initials}
+                          </div>
+                        );
+                      })}
+                      {wsConnected && wsActiveUsers.length > 5 && (
+                        <div className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-gray-700 text-xs ring-2 ring-white">
+                          +{wsActiveUsers.length - 5}
+                        </div>
+                      )}
+                    </div>
+                    {wsConnected && (
+                      <span className="text-sm text-gray-600">{wsActiveUsers.length}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="prose max-w-none">
               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <RichTextEditor content={displayContent} onChange={() => {}} editable={false} />
+                <pre className="whitespace-pre-wrap font-sans text-gray-800">{displayContent}</pre>
               </div>
             </div>
           </section>
