@@ -9,14 +9,44 @@ DELETE FROM _migrations WHERE name IN (
   '018_create_feedback.sql'
 );
 
--- Re-run migration 013: expand issue statuses for kanban
-ALTER TABLE issues DROP CONSTRAINT IF EXISTS issues_status_check;
-ALTER TABLE issues ADD CONSTRAINT issues_status_check CHECK (status IN ('triage', 'backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled'));
-UPDATE issues SET status = 'triage' WHERE status = 'open';
-UPDATE issues SET status = 'cancelled' WHERE status = 'closed';
-ALTER TABLE issues ADD COLUMN IF NOT EXISTS assignee_id UUID REFERENCES users(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
-CREATE INDEX IF NOT EXISTS idx_issues_assignee ON issues(assignee_id);
+-- Ensure prerequisite base tables exist to avoid FK failures if earlier
+-- migrations didn't run correctly in certain environments
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  username VARCHAR(255) UNIQUE NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS weeks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ DEFAULT NULL,
+  title VARCHAR(255) NOT NULL DEFAULT 'Week',
+  content TEXT DEFAULT '',
+  start_date DATE,
+  end_date DATE
+);
+
+-- Re-run migration 013: expand issue statuses for kanban (guarded if issues table exists)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables WHERE table_name = 'issues'
+  ) THEN
+    EXECUTE 'ALTER TABLE issues DROP CONSTRAINT IF EXISTS issues_status_check';
+    EXECUTE 'UPDATE issues SET status = ''triage'' WHERE status = ''open''';
+    EXECUTE 'UPDATE issues SET status = ''cancelled'' WHERE status = ''closed''';
+    EXECUTE 'ALTER TABLE issues ADD CONSTRAINT issues_status_check CHECK (status IN (''triage'', ''backlog'', ''todo'', ''in_progress'', ''in_review'', ''done'', ''cancelled''))';
+    EXECUTE 'ALTER TABLE issues ADD COLUMN IF NOT EXISTS assignee_id UUID REFERENCES users(id) ON DELETE SET NULL';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_issues_assignee ON issues(assignee_id)';
+  END IF;
+END
+$$;
 
 -- Re-run migration 014: create standups table
 CREATE TABLE IF NOT EXISTS standups (

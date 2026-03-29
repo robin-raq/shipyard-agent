@@ -449,80 +449,211 @@ export async function createReview(data: { entity_type: string; entity_id: strin
   return handleResponse(response);
 }
 
-// Activity API
-export interface ActivityLog {
+// Backlinks API (Shared contract)
+export type EntityType = 'issue' | 'project' | 'document' | 'ship' | 'program' | 'comment';
+
+export interface Backlink {
   id: string;
-  userId: string;
-  action: 'created' | 'updated' | 'deleted' | 'commented' | 'status_changed' | 'assigned';
-  entityType: 'issue' | 'project' | 'document' | 'comment' | 'standup' | 'weekly_plan' | 'weekly_retro';
-  entityId: string;
-  entityTitle: string;
-  metadata: Record<string, any>;
+  sourceType: EntityType;
+  sourceId: string;
+  targetType: EntityType;
+  targetId: string;
   createdAt: string;
 }
 
-export interface GetActivitiesResponse {
-  activities: ActivityLog[];
-  total: number;
+export async function getBacklinks(entityType: string, entityId: string): Promise<Backlink[]> {
+  const params = new URLSearchParams();
+  if (entityType) params.set('entity_type', entityType);
+  if (entityId) params.set('entity_id', entityId);
+  const query = params.toString();
+  const response = await authFetch(`/api/backlinks${query ? '?' + query : ''}`);
+  const data = await handleResponse(response);
+  if (Array.isArray(data)) return data as Backlink[];
+  if (data && Array.isArray(data.backlinks)) return data.backlinks as Backlink[];
+  return [];
 }
 
-export async function getActivities(
-  filters?: { limit?: number; offset?: number; entity_type?: string; user_id?: string }
-): Promise<GetActivitiesResponse> {
-  const params = new URLSearchParams();
-  if (filters?.limit !== undefined) params.set('limit', String(filters.limit));
-  if (filters?.offset !== undefined) params.set('offset', String(filters.offset));
-  if (filters?.entity_type) params.set('entity_type', filters.entity_type);
-  if (filters?.user_id) params.set('user_id', filters.user_id);
-  const query = params.toString();
-  const response = await authFetch(`/api/activity${query ? '?' + query : ''}`);
+export async function createBacklink(data: { sourceType: EntityType; sourceId: string; targetType: EntityType; targetId: string }): Promise<Backlink> {
+  const response = await authFetch('/api/backlinks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const res = await handleResponse(response);
+  return (res.backlink ?? res) as Backlink;
+}
+
+export async function deleteBacklink(id: string): Promise<void> {
+  const response = await authFetch(`/api/backlinks/${id}`, { method: 'DELETE' });
+  if (response.status === 204) return; // Contract: 204 No Content
+  await handleResponse(response);
+}
+
+// Admin Users API (Shared contract)
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  title: string;
+  department: string;
+  createdAt: string;
+  deletedAt: string | null;
+  updatedAt: string | null;
+}
+
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  const response = await authFetch('/api/admin/users');
+  const data = await handleResponse(response);
+  return (data.users ?? []) as AdminUser[];
+}
+
+export async function updateUserRole(id: string, role: string): Promise<AdminUser> {
+  const response = await authFetch(`/api/admin/users/${id}/role`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
+  });
+  const data = await handleResponse(response);
+  return data.user as AdminUser;
+}
+
+export async function deactivateUser(id: string): Promise<void> {
+  const response = await authFetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+  await handleResponse(response);
+}
+
+// === API Tokens (Shared contract) ===
+export interface GetApiTokensResponse {
+  tokens: Array<{
+    id: string;
+    name: string;
+    tokenPrefix: string;
+    lastUsedAt: string | null;
+    expiresAt: string | null;
+    revokedAt: string | null;
+    createdAt: string;
+  }>;
+}
+
+export interface PostApiTokenRequest {
+  name: string;
+  expiresInDays?: number;
+}
+
+export interface PostApiTokenResponse {
+  id: string;
+  name: string;
+  token: string; // Plaintext token shown once
+  tokenPrefix: string;
+  expiresAt: string | null;
+}
+
+export async function fetchApiTokens(): Promise<GetApiTokensResponse> {
+  const response = await authFetch('/api/api-tokens');
   return handleResponse(response);
 }
 
-// Sprint Reviews API (shared contract)
-export interface SprintReview {
+export async function generateApiToken(request: PostApiTokenRequest): Promise<PostApiTokenResponse> {
+  const response = await authFetch('/api/api-tokens', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse(response);
+}
+
+export async function revokeApiToken(id: string): Promise<void> {
+  const response = await authFetch(`/api/api-tokens/${id}`, { method: 'DELETE' });
+  if (!response.ok) {
+    // Will throw with parsed error message
+    await handleResponse(response);
+  }
+}
+
+// === Iterations API (Shared contract) ===
+export const ITERATION_STATUSES = ['planned', 'active', 'completed'] as const;
+export type IterationStatus = typeof ITERATION_STATUSES[number];
+
+export interface Iteration {
   id: string;
-  weekId: string;
-  authorId: string;
-  summary: string;
-  accomplishments: string;
-  challenges: string;
-  nextSteps: string;
-  teamRating: number;
-  status: string;
-  submittedAt: string | null;
+  name: string;
+  teamId: string;
+  startDate: string;
+  endDate: string;
+  goal: string;
+  status: IterationStatus;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
 }
 
-export interface GetSprintReviewsQuery {
-  week_id?: string;
-  status?: string;
-  author_id?: string;
+export interface GetIterationsResponse {
+  iterations: Iteration[];
 }
 
-export interface CreateSprintReviewRequest {
-  weekId: string;
-  summary: string;
-  accomplishments: string;
-  challenges: string;
-  nextSteps: string;
-  teamRating: number;
+export interface GetIterationResponse {
+  iteration: Iteration;
 }
 
-export async function getSprintReviews(filters?: GetSprintReviewsQuery): Promise<SprintReview[]> {
+export interface CreateIterationRequest {
+  name: string;
+  teamId: string;
+  startDate: string;
+  endDate: string;
+  goal: string;
+}
+
+export interface CreateIterationResponse {
+  iteration: Iteration;
+}
+
+export interface UpdateIterationRequest {
+  name?: string;
+  teamId?: string;
+  startDate?: string;
+  endDate?: string;
+  goal?: string;
+  status?: IterationStatus;
+}
+
+export interface UpdateIterationResponse {
+  iteration: Iteration;
+}
+
+export interface ActivateIterationResponse {
+  iteration: Iteration;
+}
+
+export interface CompleteIterationResponse {
+  iteration: Iteration;
+}
+
+export interface DeleteIterationResponse {
+  success: boolean;
+}
+
+export async function fetchIterations(teamId?: string, status?: string): Promise<GetIterationsResponse> {
   const params = new URLSearchParams();
-  if (filters?.week_id) params.set('week_id', filters.week_id);
-  if (filters?.status) params.set('status', filters.status);
-  if (filters?.author_id) params.set('author_id', filters.author_id);
+  if (teamId) params.set('team_id', teamId);
+  if (status) params.set('status', status);
   const query = params.toString();
-  const response = await authFetch(`/api/sprint-reviews${query ? '?' + query : ''}`);
+  const response = await authFetch(`/api/iterations${query ? `?${query}` : ''}`);
   return handleResponse(response);
 }
 
-export async function createSprintReview(data: CreateSprintReviewRequest): Promise<SprintReview> {
-  const response = await authFetch('/api/sprint-reviews', {
+export async function fetchCurrentIteration(): Promise<GetIterationResponse> {
+  const response = await authFetch('/api/iterations/current');
+  return handleResponse(response);
+}
+
+export async function fetchIterationById(id: string): Promise<GetIterationResponse> {
+  const response = await authFetch(`/api/iterations/${id}`);
+  return handleResponse(response);
+}
+
+export async function createIteration(data: CreateIterationRequest): Promise<CreateIterationResponse> {
+  const response = await authFetch('/api/iterations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -530,8 +661,8 @@ export async function createSprintReview(data: CreateSprintReviewRequest): Promi
   return handleResponse(response);
 }
 
-export async function updateSprintReview(id: string, data: Partial<CreateSprintReviewRequest>): Promise<SprintReview> {
-  const response = await authFetch(`/api/sprint-reviews/${id}`, {
+export async function updateIteration(id: string, data: UpdateIterationRequest): Promise<UpdateIterationResponse> {
+  const response = await authFetch(`/api/iterations/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -539,51 +670,87 @@ export async function updateSprintReview(id: string, data: Partial<CreateSprintR
   return handleResponse(response);
 }
 
-export async function submitSprintReview(id: string): Promise<SprintReview> {
-  const response = await authFetch(`/api/sprint-reviews/${id}/submit`, { method: 'PATCH' });
+export async function activateIteration(id: string): Promise<ActivateIterationResponse> {
+  const response = await authFetch(`/api/iterations/${id}/activate`, { method: 'PATCH' });
   return handleResponse(response);
 }
 
-export async function deleteSprintReview(id: string): Promise<void> {
-  const response = await authFetch(`/api/sprint-reviews/${id}`, { method: 'DELETE' });
+export async function completeIteration(id: string): Promise<CompleteIterationResponse> {
+  const response = await authFetch(`/api/iterations/${id}/complete`, { method: 'PATCH' });
+  return handleResponse(response);
+}
+
+export async function deleteIteration(id: string): Promise<DeleteIterationResponse> {
+  const response = await authFetch(`/api/iterations/${id}`, { method: 'DELETE' });
+  return handleResponse(response);
+}
+
+// === Associations API ===
+export interface Association {
+  id: string;
+  sourceType: string;
+  sourceId: string;
+  targetType: string;
+  targetId: string;
+  relationship: string;
+  createdAt: string;
+}
+
+export async function getAssociations(entityType: string, entityId: string): Promise<Association[]> {
+  const params = new URLSearchParams({ entity_type: entityType, entity_id: entityId });
+  const response = await authFetch(`/api/associations?${params}`);
+  const data = await handleResponse(response);
+  return (Array.isArray(data) ? data : data.associations ?? []) as Association[];
+}
+
+export async function createAssociation(data: {
+  sourceType: string;
+  sourceId: string;
+  targetType: string;
+  targetId: string;
+  relationship: string;
+}): Promise<Association> {
+  const response = await authFetch('/api/associations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const res = await handleResponse(response);
+  return (res.association ?? res) as Association;
+}
+
+export async function deleteAssociation(id: string): Promise<void> {
+  const response = await authFetch(`/api/associations/${id}`, { method: 'DELETE' });
+  if (response.status === 204) return;
   await handleResponse(response);
 }
 
-// Attachments API (shared contract)
-export interface Attachment {
+// === Invitations API ===
+export const INVITATION_ROLES = ['admin', 'member', 'viewer'] as const;
+
+export interface Invitation {
   id: string;
-  entityType: string;
-  entityId: string;
-  filename: string;
-  originalName: string;
-  mimeType: string;
-  sizeBytes: number;
-  uploadedBy: string;
+  email: string;
+  role: string;
+  status: string;
+  expiresAt: string | null;
   createdAt: string;
-  deletedAt: string | null;
 }
 
-export interface CreateAttachmentRequest {
-  entity_type: string;
-  entity_id: string;
-  filename: string;
-  original_name: string;
-  mime_type: string;
-  size_bytes: number;
+export interface GetInvitationByTokenResponse {
+  email: string;
+  role: string;
+  status: string;
+  expiresAt: string | null;
 }
 
-export type CreateAttachmentResponse = Attachment;
-export type GetAttachmentsResponse = Attachment[];
-export type DeleteAttachmentResponse = {};
-
-export async function getAttachments(entityType: string, entityId: string): Promise<Attachment[]> {
-  const params = new URLSearchParams({ entity_type: entityType, entity_id: entityId });
-  const response = await fetch(`/api/attachments?${params.toString()}`);
+export async function getInvitations(): Promise<{ invitations: Invitation[] }> {
+  const response = await authFetch('/api/invitations');
   return handleResponse(response);
 }
 
-export async function createAttachment(data: CreateAttachmentRequest): Promise<Attachment> {
-  const response = await authFetch('/api/attachments', {
+export async function createInvitation(data: { email: string; role: string }): Promise<Invitation> {
+  const response = await authFetch('/api/invitations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -591,72 +758,51 @@ export async function createAttachment(data: CreateAttachmentRequest): Promise<A
   return handleResponse(response);
 }
 
-export async function deleteAttachment(id: string): Promise<void> {
-  const response = await authFetch(`/api/attachments/${id}`, { method: 'DELETE' });
+export async function revokeInvitation(id: string): Promise<void> {
+  const response = await authFetch(`/api/invitations/${id}/revoke`, { method: 'PATCH' });
   await handleResponse(response);
 }
 
-// My Week API (shared contract)
-export interface Week {
-  start_date: string;
-  // other fields as necessary
+export async function getInvitationByToken(token: string): Promise<GetInvitationByTokenResponse> {
+  const response = await fetch(`/api/invitations/token/${token}`);
+  return handleResponse(response);
 }
 
-export interface Standup {
-  user_id: string;
-  standup_date: string;
-  // other fields as necessary
+export async function acceptInvitation(token: string, data: { username: string; password: string }): Promise<void> {
+  const response = await fetch(`/api/invitations/token/${token}/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  await handleResponse(response);
 }
 
-export interface WeeklyPlan {
-  user_id: string;
-  week_id: string;
-  plan_content: string;
-  status: string;
+// === Activity API ===
+export async function getActivities(filters?: { limit?: number; offset?: number; entity_type?: string }): Promise<{ activities: any[]; total: number }> {
+  const params = new URLSearchParams();
+  if (filters?.limit) params.set('limit', String(filters.limit));
+  if (filters?.offset) params.set('offset', String(filters.offset));
+  if (filters?.entity_type) params.set('entity_type', filters.entity_type);
+  const query = params.toString();
+  const response = await authFetch(`/api/activities${query ? '?' + query : ''}`);
+  return handleResponse(response);
 }
 
-export interface WeeklyRetro {
-  user_id: string;
-  week_id: string;
-  went_well: string;
-  to_improve: string;
-  action_items: string;
-}
-
+// === My Week API ===
 export interface MyWeekResponse {
-  week: Week;
-  standup: Standup | null;
-  plan: WeeklyPlan | null;
-  retro: WeeklyRetro | null;
+  week?: { id: string; start_date: string; end_date: string; title: string };
+  standup?: { id: string; standup_date: string; [key: string]: any };
+  plan?: { id: string; plan_content: string; status: string; [key: string]: any };
+  retro?: { id: string; went_well: string; to_improve: string; action_items: string; [key: string]: any };
 }
 
 export async function getMyWeek(weekId?: string): Promise<MyWeekResponse> {
-  const params = new URLSearchParams();
-  if (weekId) params.set('week_id', weekId);
-  const query = params.toString();
-  const response = await authFetch(`/api/my-week${query ? `?${query}` : ''}`);
+  const params = weekId ? `?week_id=${weekId}` : '';
+  const response = await authFetch(`/api/my-week${params}`);
   return handleResponse(response);
 }
 
-// Status Overview API (shared contract)
-const ISSUE_STATUSES = ['triage', 'backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled'] as const;
-const ISSUE_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
-
-export interface StatusOverview {
-  issuesByStatus: Record<typeof ISSUE_STATUSES[number], number>;
-  issuesByPriority: Record<typeof ISSUE_PRIORITIES[number], number>;
-  projectCount: number;
-  teamCount: number;
-  activeUsersToday: number;
-  pendingReviews: number;
-}
-
-export async function getStatusOverview(): Promise<StatusOverview> {
-  const response = await authFetch('/api/status-overview');
-  return handleResponse(response);
-}
-
-// Profile API (shared contract)
+// === Profile API ===
 export interface UserProfile {
   id: string;
   username: string;
@@ -673,7 +819,7 @@ export interface UserProfile {
 }
 
 export async function getProfile(): Promise<UserProfile> {
-  const response = await authFetch('/api/profile/');
+  const response = await authFetch('/api/profile');
   return handleResponse(response);
 }
 
@@ -684,7 +830,7 @@ export async function updateProfile(data: {
   phone?: string;
   location?: string;
 }): Promise<UserProfile> {
-  const response = await authFetch('/api/profile/', {
+  const response = await authFetch('/api/profile', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -692,133 +838,64 @@ export async function updateProfile(data: {
   return handleResponse(response);
 }
 
-export async function getUserProfile(id: string): Promise<UserProfile> {
-  const response = await authFetch(`/api/profile/${id}`);
-  return handleResponse(response);
-}
-
-// Invitations API (shared contract)
-export const INVITATION_ROLES = ['member', 'admin'] as const;
-export const INVITATION_STATUSES = ['pending', 'accepted', 'expired', 'revoked'] as const;
-
-export interface Invitation {
+// === Sprint Reviews API ===
+export interface SprintReview {
   id: string;
-  email: string;
-  invitedBy: string;
-  role: typeof INVITATION_ROLES[number];
-  token: string;
-  status: typeof INVITATION_STATUSES[number];
-  acceptedAt: Date | null;
-  expiresAt: Date;
-  createdAt: Date;
-}
-
-export interface GetInvitationsResponse {
-  invitations: Invitation[];
-}
-
-export interface CreateInvitationRequest {
-  email: string;
-  role: typeof INVITATION_ROLES[number];
-}
-
-export interface CreateInvitationResponse {
-  invitation: Invitation;
-}
-
-export interface GetInvitationByTokenResponse {
-  email: string;
-  role: typeof INVITATION_ROLES[number];
-}
-
-export interface AcceptInvitationRequest {
-  username: string;
-  password: string;
-}
-
-export interface User {
-  id: string;
-  username: string;
-  email: string;
-  role: typeof INVITATION_ROLES[number];
-  createdAt: Date;
-}
-
-export interface AcceptInvitationResponse {
-  user: User;
-}
-
-export async function getInvitations(): Promise<GetInvitationsResponse> {
-  const response = await authFetch('/api/invitations');
-  return handleResponse(response);
-}
-
-export async function createInvitation(data: CreateInvitationRequest): Promise<CreateInvitationResponse> {
-  const response = await authFetch('/api/invitations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return handleResponse(response);
-}
-
-export async function getInvitationByToken(token: string): Promise<GetInvitationByTokenResponse> {
-  const response = await fetch(`/api/invitations/accept/${encodeURIComponent(token)}`);
-  return handleResponse(response);
-}
-
-export async function acceptInvitation(token: string, data: AcceptInvitationRequest): Promise<AcceptInvitationResponse> {
-  const response = await fetch(`/api/invitations/accept/${encodeURIComponent(token)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return handleResponse(response);
-}
-
-export async function revokeInvitation(id: string): Promise<void> {
-  const response = await authFetch(`/api/invitations/${id}`, { method: 'DELETE' });
-  await handleResponse(response);
-}
-
-// Associations API (shared contract)
-const ENTITY_TYPES = ['issue', 'project', 'document', 'ship', 'program', 'team'] as const;
-const RELATIONSHIP_TYPES = ['related', 'blocks', 'blocked_by', 'parent', 'child', 'implements', 'depends_on'] as const;
-
-export interface Association {
-  id: string;
-  sourceType: string;
-  sourceId: string;
-  targetType: string;
-  targetId: string;
-  relationship: string;
-  createdBy: string;
+  weekId: string;
+  summary: string;
+  accomplishments: string;
+  challenges: string;
+  nextSteps: string;
+  teamRating: number;
+  status: string;
   createdAt: string;
+  updatedAt: string;
 }
 
-export async function getAssociations(entityType: string, entityId: string): Promise<Association[]> {
-  const params = new URLSearchParams({ entity_type: entityType, entity_id: entityId });
-  const response = await authFetch(`/api/associations?${params.toString()}`);
-  return handleResponse(response);
+export async function getSprintReviews(): Promise<SprintReview[]> {
+  const response = await authFetch('/api/sprint-reviews');
+  const data = await handleResponse(response);
+  return (Array.isArray(data) ? data : data.reviews ?? []) as SprintReview[];
 }
 
-export async function createAssociation(data: { sourceType: string; sourceId: string; targetType: string; targetId: string; relationship: string }): Promise<Association> {
-  const payload = {
-    source_type: data.sourceType,
-    source_id: data.sourceId,
-    target_type: data.targetType,
-    target_id: data.targetId,
-    relationship: data.relationship,
-  };
-  const response = await authFetch('/api/associations', {
+export async function createSprintReview(data: {
+  weekId: string;
+  summary: string;
+  accomplishments?: string;
+  challenges?: string;
+  nextSteps?: string;
+  teamRating?: number;
+}): Promise<SprintReview> {
+  const response = await authFetch('/api/sprint-reviews', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(data),
   });
   return handleResponse(response);
 }
 
-export async function deleteAssociation(id: string): Promise<void> {
-  const response = await authFetch(`/api/associations/${id}`, { method: 'DELETE' });
+export async function submitSprintReview(id: string): Promise<SprintReview> {
+  const response = await authFetch(`/api/sprint-reviews/${id}/submit`, { method: 'PATCH' });
+  return handleResponse(response);
+}
+
+export async function deleteSprintReview(id: string): Promise<void> {
+  const response = await authFetch(`/api/sprint-reviews/${id}`, { method: 'DELETE' });
+  if (response.status === 204) return;
   await handleResponse(response);
+}
+
+// === Status Overview API ===
+export interface StatusOverview {
+  projectCount: number;
+  teamCount: number;
+  activeUsersToday: number;
+  pendingReviews: number;
+  issuesByStatus: Record<string, number>;
+  issuesByPriority: Record<string, number>;
+}
+
+export async function getStatusOverview(): Promise<StatusOverview> {
+  const response = await authFetch('/api/status-overview');
+  return handleResponse(response);
 }

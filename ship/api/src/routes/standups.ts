@@ -13,8 +13,9 @@ export function createStandupsRouter(pool: pg.Pool): Router {
       const { date, user_id, from, to } = req.query;
 
       let query = `
-        SELECT s.*
+        SELECT s.*, u.username
         FROM standups s
+        JOIN users u ON s.user_id = u.id
         WHERE s.deleted_at IS NULL`;
       const params: string[] = [];
       let paramCount = 1;
@@ -38,19 +39,8 @@ export function createStandupsRouter(pool: pg.Pool): Router {
 
       query += " ORDER BY s.standup_date DESC, s.created_at DESC";
 
-      try {
-        const result = await pool.query(query, params);
-        return res.status(200).json(result.rows);
-      } catch (e: any) {
-        // Fallback for tests or legacy schemas without standup_date/deleted_at columns
-        if (e && (e.code === "42703" || e.code === "42P01")) {
-          const fallback = await pool.query(
-            "SELECT * FROM standups ORDER BY created_at DESC"
-          );
-          return res.status(200).json(fallback.rows);
-        }
-        throw e;
-      }
+      const result = await pool.query(query, params);
+      res.status(200).json(result.rows);
     } catch (err) {
       next(err);
     }

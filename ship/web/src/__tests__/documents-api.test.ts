@@ -391,8 +391,7 @@ describe('Documents API', () => {
         json: async () => null,
       });
 
-      // When json() returns null, accessing .message throws an error
-      await expect(getDocs()).rejects.toThrow();
+      await expect(getDocs()).rejects.toThrow('HTTP 500: Internal Server Error');
     });
   });
 

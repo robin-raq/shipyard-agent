@@ -528,8 +528,8 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
 
         # Detect recursion limit (worker looped too many times)
         if "recursion limit" in error_msg.lower() or "GraphRecursionError" in error_msg:
-            # Clean up incomplete files created by the failed worker
-            cleanup_note = _cleanup_incomplete_files(_workspace_root, task["worker"])
+            from shipyard.tools import _workspace_root as ws_root
+            cleanup_note = _cleanup_incomplete_files(ws_root, task["worker"])
             tasks[index] = {
                 **task,
                 "status": "failed",

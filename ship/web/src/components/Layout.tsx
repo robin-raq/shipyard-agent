@@ -1,9 +1,13 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
+import FleetGraphPanel from './FleetGraphPanel';
 
 export default function Layout() {
   const location = useLocation();
   const { user, logout } = useAuth();
+
+  const [fleetGraphOpen, setFleetGraphOpen] = useState(false);
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -22,11 +26,13 @@ export default function Layout() {
     { path: '/reviews', label: 'Reviews', icon: '✅' },
     { path: '/ships', label: 'Ships', icon: '⛵' },
     { path: '/programs', label: 'Programs', icon: '🎯' },
+    { path: '/iterations', label: 'Iterations', icon: '🔁' },
+    { path: '/approvals', label: 'Approvals', icon: '✅' },
     { path: '/org-chart', label: 'Org Chart', icon: '🏢' },
     { path: '/notifications', label: 'Notifications', icon: '🔔' },
-    { path: '/invitations', label: 'Invitations', icon: '✉️' },
     { path: '/profile', label: 'Profile', icon: '👤' },
     { path: '/settings', label: 'Settings', icon: '⚙️' },
+    { path: '/api-tokens', label: 'API Tokens', icon: '🔑' },
   ];
 
   const isActive = (path: string) => location.pathname.startsWith(path);
@@ -42,8 +48,16 @@ export default function Layout() {
 
       <nav aria-label="Main navigation">
         <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-full">
-          <header className="p-6 border-b border-gray-200">
+          <header className="p-6 border-b border-gray-200 flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">⚓ Ship</h1>
+            <button
+              onClick={() => setFleetGraphOpen(true)}
+              className="p-2 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Open FleetGraph"
+              title="Open FleetGraph"
+            >
+              ⚡
+            </button>
           </header>
           <div className="flex-1 p-4 overflow-y-auto">
             <ul className="space-y-1" role="list">
@@ -89,6 +103,8 @@ export default function Layout() {
       <main id="main-content" role="main" className="flex-1 overflow-auto">
         <Outlet />
       </main>
+
+      <FleetGraphPanel open={fleetGraphOpen} onClose={() => setFleetGraphOpen(false)} />
     </div>
   );
 }

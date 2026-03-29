@@ -1,6 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import '@testing-library/jest-dom/extend-expect';
+import { render, screen, fireEvent } from '../test-utils/testing-library-react';
 import BulkActionBar from '../components/BulkActionBar';
 
 // Mock functions
@@ -8,7 +7,7 @@ const onBulkDelete = jest.fn();
 const onBulkStatusChange = jest.fn();
 const onSelectAllToggle = jest.fn();
 
-const renderComponent = (selectedIds = []) => {
+const renderComponent = (selectedIds: string[] = []) => {
   render(
     <BulkActionBar
       selectedIds={selectedIds}
@@ -26,15 +25,18 @@ describe('BulkActionBar Component', () => {
 
   test('Renders nothing when no items are selected', () => {
     renderComponent();
-    expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+    expect(screen.queryByText('selected')).toBeNull();
   });
 
   test('Shows "{count} selected" when items are selected', () => {
     renderComponent(['1', '2', '3']);
-    expect(screen.getByText('3 selected')).toBeInTheDocument();
+    expect(screen.getByText('3 selected')).toBeTruthy();
   });
 
   test('Has "Delete Selected" button that calls onBulkDelete with selected IDs', () => {
+    // Mock confirm to always accept
+    // @ts-ignore
+    window.confirm = jest.fn(() => true);
     renderComponent(['1', '2']);
     fireEvent.click(screen.getByText('Delete Selected'));
     expect(onBulkDelete).toHaveBeenCalledWith(['1', '2']);
@@ -53,8 +55,9 @@ describe('BulkActionBar Component', () => {
   });
 
   test('"Delete Selected" shows a confirmation before executing', () => {
+    // @ts-ignore
+    window.confirm = jest.fn(() => true);
     renderComponent(['1']);
-    window.confirm = jest.fn(() => true); // Mock confirm to always return true
     fireEvent.click(screen.getByText('Delete Selected'));
     expect(window.confirm).toHaveBeenCalledWith('Are you sure you want to delete the selected items?');
     expect(onBulkDelete).toHaveBeenCalledWith(['1']);

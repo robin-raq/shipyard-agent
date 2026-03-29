@@ -30,6 +30,9 @@ import StatusOverviewPage from './pages/StatusOverviewPage';
 import ProfilePage from './pages/ProfilePage';
 import InvitationsPage from './pages/InvitationsPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
+import ApiTokensPage from './pages/ApiTokensPage';
+import IterationsPage from './pages/IterationsPage';
+import ApprovalsPage from './pages/ApprovalsPage';
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
@@ -71,10 +74,13 @@ function ProtectedRoutes() {
           <Route path="org-chart" element={<OrgChartPage />} />
           <Route path="programs" element={<ProgramsPage />} />
           <Route path="programs/:id" element={<ProgramDetailPage />} />
+          <Route path="iterations" element={<IterationsPage />} />
+          <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="my-week" element={<MyWeekPage />} />
           <Route path="status" element={<StatusOverviewPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="invitations" element={<InvitationsPage />} />
+          <Route path="api-tokens" element={<ApiTokensPage />} />
           <Route path=":type/:id" element={<DocumentDetailPage />} />
         </Route>
       </Routes>
@@ -97,7 +103,6 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/feedback" element={<PublicFeedbackPage />} />
-      <Route path="/invite/accept/:token" element={<AcceptInvitePage />} />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );

@@ -24,17 +24,26 @@ import { createWeeklyPlansRouter } from "./routes/weekly-plans.js";
 import { createWeeklyRetrosRouter } from "./routes/weekly-retros.js";
 import { createReviewsRouter } from "./routes/reviews.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
+import { createTeamPeopleRouter } from "./routes/team-people.js";
 import { createActivityRouter } from "./routes/activity.js";
+import { createAssociationsRouter } from "./routes/associations.js";
 import { createAttachmentsRouter } from "./routes/attachments.js";
-import { createSprintReviewsRouter } from "./routes/sprint-reviews.js";
-import { createSettingsRouter } from "./routes/settings.js";
+import { createInvitationsRouter } from "./routes/invitations.js";
+import { createMyWeekRouter } from "./routes/my-week.js";
 import { createNotificationsRouter } from "./routes/notifications.js";
 import { createOrgChartRouter } from "./routes/org-chart.js";
-import { createMyWeekRouter } from "./routes/my-week.js";
-import { createStatusOverviewRouter } from "./routes/status-overview.js";
 import { createProfileRouter } from "./routes/profile.js";
-import { createInvitationsRouter } from "./routes/invitations.js";
-import { createAssociationsRouter } from "./routes/associations.js";
+import { createSettingsRouter } from "./routes/settings.js";
+import { createSprintReviewsRouter } from "./routes/sprint-reviews.js";
+import { createStatusOverviewRouter } from "./routes/status-overview.js";
+import { createAdminRouter } from "./routes/admin.js";
+import { createAuditLogRouter } from "./routes/audit-log.js";
+import { createRateLimiter, authRateLimiter } from "./middleware/rateLimiter.js";
+import { createAuditLogger } from "./middleware/auditLogger.js";
+import { createBacklinksRouter } from "./routes/backlinks.js";
+import { createApiTokensRouter } from "./routes/api-tokens.js";
+import { createSetupRouter } from "./routes/setup.js";
+import { createIterationsRouter } from "./routes/iterations.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +54,9 @@ export function createApp(pool: pg.Pool): Express {
   // Middleware
   app.use(cors());
   app.use(express.json());
+  app.use(createRateLimiter());
+  // Audit logging for mutating requests (after JSON parsing, before routes)
+  app.use(createAuditLogger(pool));
 
   // Health check endpoint (no database dependency)
   app.get("/health", (req, res) => {
@@ -52,7 +64,7 @@ export function createApp(pool: pg.Pool): Express {
   });
 
   // API Routes
-  app.use("/api/auth", createAuthRouter(pool));
+  app.use("/api/auth", authRateLimiter, createAuthRouter(pool));
   app.use("/api/documents", createDocumentsRouter(pool)); // backward compatibility
   app.use("/api/docs", createDocsRouter(pool));
   app.use("/api/issues", createIssuesRouter(pool));
@@ -65,6 +77,7 @@ export function createApp(pool: pg.Pool): Express {
   app.use("/api/dashboard", createDashboardRouter(pool));
   app.use("/api/search", createSearchRouter(pool));
   app.use("/api/accountability", createAccountabilityRouter(pool));
+  app.use("/api/team/people", createTeamPeopleRouter(pool));
 
   app.use("/api/standups", createStandupsRouter(pool));
   app.use("/api/weekly-plans", createWeeklyPlansRouter(pool));
@@ -72,16 +85,22 @@ export function createApp(pool: pg.Pool): Express {
   app.use("/api/reviews", createReviewsRouter(pool));
   app.use("/api/feedback", createFeedbackRouter(pool));
   app.use("/api/activity", createActivityRouter(pool));
+  app.use("/api/associations", createAssociationsRouter(pool));
   app.use("/api/attachments", createAttachmentsRouter(pool));
-  app.use("/api/sprint-reviews", createSprintReviewsRouter(pool));
-  app.use("/api/settings", createSettingsRouter(pool));
+  app.use("/api/invitations", createInvitationsRouter(pool));
+  app.use("/api/my-week", createMyWeekRouter(pool));
   app.use("/api/notifications", createNotificationsRouter(pool));
   app.use("/api/org-chart", createOrgChartRouter(pool));
-  app.use("/api/my-week", createMyWeekRouter(pool));
-  app.use("/api/status-overview", createStatusOverviewRouter(pool));
   app.use("/api/profile", createProfileRouter(pool));
-  app.use("/api/invitations", createInvitationsRouter(pool));
-  app.use("/api/associations", createAssociationsRouter(pool));
+  app.use("/api/settings", createSettingsRouter(pool));
+  app.use("/api/sprint-reviews", createSprintReviewsRouter(pool));
+  app.use("/api/status-overview", createStatusOverviewRouter(pool));
+  app.use("/api/admin", createAdminRouter(pool));
+  app.use("/api/admin/audit-log", createAuditLogRouter(pool));
+  app.use("/api/backlinks", createBacklinksRouter(pool));
+  app.use("/api/api-tokens", createApiTokensRouter(pool));
+  app.use("/api/setup", createSetupRouter(pool));
+  app.use("/api/iterations", createIterationsRouter(pool));
 
 // API Documentation
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

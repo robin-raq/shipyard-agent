@@ -55,27 +55,25 @@ export default function ActivityPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [limit] = useState(20);
+  const [limit, setLimit] = useState(20);
   const [offset, setOffset] = useState(0);
 
-  const baseFilters = useMemo(() => {
-    const f: { limit: number; entity_type?: string } = { limit };
+  const filters = useMemo(() => {
+    const f: { limit: number; offset: number; entity_type?: string } = { limit, offset };
     if (selectedTab !== 'all') f.entity_type = selectedTab;
     return f;
-  }, [limit, selectedTab]);
+  }, [limit, offset, selectedTab]);
 
-  // Fetch first page whenever tab or limit changes
   useEffect(() => {
     let cancelled = false;
-    async function fetchFirst() {
+    async function fetchData() {
       try {
         setLoading(true);
         setError(null);
-        const res = await getActivities({ ...baseFilters, offset: 0 });
+        const res = await getActivities(filters);
         if (!cancelled) {
           setActivities(res.activities as ActivityLog[]);
           setTotal(res.total || 0);
-          setOffset(0);
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load activity');
@@ -83,44 +81,30 @@ export default function ActivityPage() {
         if (!cancelled) setLoading(false);
       }
     }
-    fetchFirst();
+    fetchData();
     return () => {
       cancelled = true;
     };
-  }, [baseFilters]);
-
-  // Fetch and append additional pages when offset increases
-  useEffect(() => {
-    if (offset === 0) return;
-    let cancelled = false;
-    async function fetchMore() {
-      try {
-        setLoading(true);
-        const res = await getActivities({ ...baseFilters, offset });
-        if (!cancelled) {
-          setActivities((prev) => [...prev, ...(res.activities as ActivityLog[])]);
-          setTotal(res.total || 0);
-        }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load more');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    fetchMore();
-    return () => {
-      cancelled = true;
-    };
-  }, [offset, baseFilters]);
+  }, [filters]);
 
   const canLoadMore = activities.length < total;
 
   const handleTabChange = (key: (typeof TABS)[number]['key']) => {
     setSelectedTab(key);
+    setOffset(0);
   };
 
-  const handleLoadMore = () => {
-    setOffset((prev) => prev + limit);
+  const handleLoadMore = async () => {
+    const nextOffset = offset + limit;
+    setOffset(nextOffset);
+    try {
+      const res = await getActivities({ ...filters, offset: nextOffset });
+      // Append new activities
+      setActivities((prev) => [...prev, ...(res.activities as ActivityLog[])]);
+      setTotal(res.total || 0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load more');
+    }
   };
 
   return (
