@@ -33,11 +33,8 @@ describe("POST /api/auth/login - Valid Credentials", () => {
   };
 
   beforeAll(async () => {
-    // Serialize DDL across concurrent test files to avoid duplicate type errors
+    // Create tables for testing
     await testPool.query(`
-      BEGIN;
-      SELECT pg_advisory_lock(424242);
-      CREATE EXTENSION IF NOT EXISTS pgcrypto;
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         username VARCHAR(255) UNIQUE NOT NULL,
@@ -45,15 +42,16 @@ describe("POST /api/auth/login - Valid Credentials", () => {
         password VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+      )
+    `);
+
+    await testPool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
         session_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         expires_at TIMESTAMP NOT NULL
-      );
-      SELECT pg_advisory_unlock(424242);
-      COMMIT;
+      )
     `);
 
     // Register test user
@@ -63,7 +61,7 @@ describe("POST /api/auth/login - Valid Credentials", () => {
   });
 
   afterAll(async () => {
-    // Clean up sessions for this test suite (do not drop tables to avoid race with other suites)
+    // Clean up sessions for this test suite
     await testPool.query("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE username = $1)", [testUser.username]);
   });
 
@@ -348,11 +346,8 @@ describe("POST /api/auth/login - Invalid Credentials", () => {
   };
 
   beforeAll(async () => {
-    // Create tables for testing (if not already created) with advisory lock to avoid races
+    // Create tables for testing (if not already created)
     await testPool.query(`
-      BEGIN;
-      SELECT pg_advisory_lock(424242);
-      CREATE EXTENSION IF NOT EXISTS pgcrypto;
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         username VARCHAR(255) UNIQUE NOT NULL,
@@ -360,15 +355,16 @@ describe("POST /api/auth/login - Invalid Credentials", () => {
         password VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+      )
+    `);
+
+    await testPool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
         session_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         expires_at TIMESTAMP NOT NULL
-      );
-      SELECT pg_advisory_unlock(424242);
-      COMMIT;
+      )
     `);
 
     // Register test user for invalid login attempts
@@ -748,6 +744,8 @@ describe("POST /api/auth/login - Invalid Credentials", () => {
 
 // Global cleanup after all test suites
 afterAll(async () => {
-  // Close pool connection (do not drop shared tables used by other tests)
+  // Drop tables and close pool connection
+  await testPool.query("DROP TABLE IF EXISTS sessions CASCADE");
+  await testPool.query("DROP TABLE IF EXISTS users CASCADE");
   await testPool.end();
 });

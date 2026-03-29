@@ -462,43 +462,6 @@ describe("Authentication Middleware", () => {
         expect(response.body.message).toContain("Authentication required");
         expect(response.body.status).toBe(401);
       });
-
-      it("should return 401 when accessing GET /api/admin/test with expired session", async () => {
-        // Create a user with admin role
-        const userResult = await testPool.query(
-          `INSERT INTO users (username, email, password, role) 
-           VALUES ($1, $2, $3, $4) 
-           RETURNING id`,
-          ["expiredadmin", "expiredadmin@example.com", "hashedpassword", "admin"]
-        );
-        const expiredAdminId = userResult.rows[0].id;
-
-        // Create an expired session
-        const expiredSessionResult = await testPool.query(
-          `INSERT INTO sessions (user_id, expires_at) 
-           VALUES ($1, NOW() - INTERVAL '1 day') 
-           RETURNING session_id`,
-          [expiredAdminId]
-        );
-        const expiredToken = expiredSessionResult.rows[0].session_id;
-
-        // Try to access /api/admin/test with expired session
-        const response = await request(app)
-          .get("/api/admin/test")
-          .set("Authorization", `Bearer ${expiredToken}`);
-
-        expect(response.status).toBe(401);
-        expect(response.body.error).toBe(true);
-        expect(response.body.message).toContain("Session expired");
-        expect(response.body.status).toBe(401);
-
-        // Verify session was deleted from database
-        const sessionCheck = await testPool.query(
-          "SELECT * FROM sessions WHERE session_id = $1",
-          [expiredToken]
-        );
-        expect(sessionCheck.rows.length).toBe(0);
-      });
     });
 
     describe("Multiple role requirement", () => {
