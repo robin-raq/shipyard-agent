@@ -556,6 +556,26 @@ The agent's verification (`tsc --noEmit` + smart verify) catches **compile-time*
 2. Auth patterns are inconsistent (some use `authFetch`, others use raw `fetch`)
 3. Package versions are hallucinated without verification
 
+#### Issue 7: Agent didn't write tests for 5 of 13 routes
+
+The agent created test files for some routes during Batch 3 (my-week, profile, associations, invitations, status-overview) but **skipped tests entirely for 5 routes**: org-chart, notifications, settings, setup, sprint-reviews. These were the exact routes that shipped with broken auth middleware — if tests had existed and hit the endpoints with an auth token, the custom-auth-vs-shared-auth mismatch would have been caught before deploy.
+
+**Root cause:** The task prompts included "Write tests FIRST" in the TDD preamble, but the supervisor decomposed some tasks without a dedicated test subtask. When the frontend worker was busy creating pages, the backend worker moved on without writing tests. The TDD instruction was advisory, not enforced.
+
+**What this cost:** 5 routes deployed with broken authentication. All returned 401 for logged-in users. Required a manual fix across all 5 files.
+
+**Fix:** Created a dedicated test generation batch (`run_tests_batch.py`) to retroactively generate tests for the 5 missing routes. Future improvement: add a post-task check that verifies a test file exists for every new route file.
+
+#### Issue 8: Custom auth middleware instead of shared middleware
+
+5 of the Batch 3 routes (org-chart, notifications, settings, setup, sprint-reviews) implemented their own `requireAuth` and `getAuthUserId` functions instead of using the shared `createAuthMiddleware(pool)`. The custom functions checked `req.user?.id` but `req.user` was never populated because the real auth middleware wasn't applied. The routes compiled fine — `req.user` is typed as optional, so TypeScript didn't catch it.
+
+**Root cause:** The agent pattern-matched on the wrong exemplar. Some older routes in the codebase had inline auth checks, and the agent copied that pattern instead of the `createAuthMiddleware` import pattern. The `gather_context` exemplar selection picked files that happened to use the old pattern.
+
+**What this cost:** Every new route returned 401 for authenticated users. 5 files needed manual fixes.
+
+**Fix:** Updated all 5 routes to use `createAuthMiddleware(pool)`. Future prevention: add to the backend worker prompt that auth MUST use `createAuthMiddleware` — never define custom auth functions.
+
 #### Preventive Measures Implemented
 
 1. **Worker prompt rule 7**: "Never add dependencies without running `pnpm install` and checking the version exists first"
@@ -568,6 +588,8 @@ The agent's verification (`tsc --noEmit` + smart verify) catches **compile-time*
 2. **Migration-route consistency check**: Every route that creates a table should have a migration, and vice versa
 3. **Auth pattern linting**: Grep for raw `fetch('/api/` in frontend files — all should use `authFetch`
 4. **Package version validation**: `pnpm view <package> version` before adding to package.json
+5. **Test file enforcement**: Every new route file must have a corresponding test file — fail the task if missing
+6. **Auth middleware enforcement**: Backend worker prompt must specify `createAuthMiddleware(pool)` — never define custom auth functions
 
 #### Updated Intervention Counts
 
@@ -576,7 +598,10 @@ The agent's verification (`tsc --noEmit` + smart verify) catches **compile-time*
 | Kanban | 7 | 0% | N/A | 7 |
 | Batch 1 | 6 | 17% | 5 (path fixes) | 10 |
 | Batch 2 | 5 | 100% | 0 | 0 |
-| Batch 3 | 13 | 85% | 6 (auth, migration, lockfile, schema) | 8 |
-| **Total** | **31** | **55% fully autonomous** | **11 post-deploy fixes** | **25 total interventions** |
+| Batch 3 | 13 | 85% | 8 (auth, migration, lockfile, schema, missing tests) | 10 |
+| **Total** | **31** | **55% fully autonomous** | **13 post-deploy fixes** | **27 total interventions** |
 
-The agent is excellent at generating correct TypeScript that compiles — but "compiles" ≠ "works in production." The next improvement frontier is **runtime verification**, not better code generation.
+The agent is excellent at generating correct TypeScript that compiles — but "compiles" ≠ "works in production." The biggest gaps are now:
+1. **Missing tests** — the agent doesn't consistently write tests for every route
+2. **Wrong auth pattern** — copies whichever exemplar `gather_context` picks, even if it's the wrong pattern
+3. **No runtime verification** — tsc passes but endpoints return 401/404/500 at runtime
