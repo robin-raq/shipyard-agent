@@ -1,3 +1,5 @@
+import { authFetch } from '../context/AuthContext';
+
 const FLEETGRAPH_URL = import.meta.env.VITE_FLEETGRAPH_URL || 'http://localhost:4000';
 
 // Shared contract types
@@ -39,7 +41,7 @@ async function handleResponse(res: Response) {
 export async function getFleetGraphApprovals(status?: ApprovalStatus): Promise<{ approvals: ApprovalRecord[] }> {
   const url = new URL(`${FLEETGRAPH_URL}/api/approvals`);
   if (status) url.searchParams.set('status', status);
-  const res = await fetch(url.toString());
+  const res = await authFetch(url.toString());
   return handleResponse(res);
 }
 
@@ -47,7 +49,7 @@ export async function updateFleetGraphApproval(
   id: string,
   decision: 'approved' | 'rejected'
 ): Promise<ApprovalRecord> {
-  const res = await fetch(`${FLEETGRAPH_URL}/api/approvals/${id}`, {
+  const res = await authFetch(`${FLEETGRAPH_URL}/api/approvals/${id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ decision }),

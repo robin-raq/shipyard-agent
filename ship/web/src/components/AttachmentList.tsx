@@ -61,7 +61,7 @@ export default function AttachmentList({ entityType, entityId, className = '', r
     setError(null);
     try {
       const params = new URLSearchParams({ entity_type: entityType, entity_id: entityId });
-      const res = await fetch(`/api/attachments?${params.toString()}`);
+      const res = await authFetch(`/api/attachments?${params.toString()}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: 'Failed to fetch attachments' }));
         throw new Error(err.message || 'Failed to fetch attachments');

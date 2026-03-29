@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { authFetch } from '../context/AuthContext';
 
 // Local copy of shared contract types for Notifications
 const NOTIFICATION_TYPES = ['assignment', 'comment', 'review_request', 'review_decision', 'mention', 'status_change'] as const;
@@ -63,7 +64,7 @@ export default function NotificationsPage() {
 
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications/unread-count', { credentials: 'include' });
+      const res = await authFetch('/api/notifications/unread-count');
       if (!res.ok) throw new Error(`Failed to fetch unread count (${res.status})`);
       const json = (await res.json()) as GetUnreadCountResponse;
       setUnreadCount(json.count ?? 0);
@@ -80,7 +81,7 @@ export default function NotificationsPage() {
       params.set('limit', String(query.limit));
       params.set('offset', String(query.offset));
       if (query.unreadOnly) params.set('unread_only', 'true');
-      const res = await fetch(`/api/notifications?${params.toString()}`, { credentials: 'include' });
+      const res = await authFetch(`/api/notifications?${params.toString()}`);
       if (!res.ok) throw new Error(`Failed to fetch notifications (${res.status})`);
       const json = (await res.json()) as GetNotificationsResponse;
       setItems(json.notifications || []);
@@ -109,7 +110,7 @@ export default function NotificationsPage() {
 
   const markAllRead = async () => {
     try {
-      await fetch('/api/notifications/read-all', { method: 'PATCH', credentials: 'include' });
+      await authFetch('/api/notifications/read-all', { method: 'PATCH' });
       setItems((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })));
       setUnreadCount(0);
       if (tab === 'unread') {
@@ -123,7 +124,7 @@ export default function NotificationsPage() {
 
   const markOneRead = async (id: string) => {
     try {
-      await fetch(`/api/notifications/${id}/read`, { method: 'PATCH', credentials: 'include' });
+      await authFetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
       if (tab === 'unread') {
         setItems((prev) => prev.filter((n) => n.id !== id));
       } else {

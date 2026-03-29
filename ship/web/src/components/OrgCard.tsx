@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { authFetch } from '../context/AuthContext';
 
 // Local copy of shared contract types for Org Chart
 export interface User {
@@ -81,10 +82,9 @@ export default function OrgCard({
         return;
       }
 
-      const res = await fetch(`/api/org-chart/user/${encodeURIComponent(user.id)}`, {
+      const res = await authFetch(`/api/org-chart/user/${encodeURIComponent(user.id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(body),
       });
       if (!res.ok) {

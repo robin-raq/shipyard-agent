@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { authFetch } from '../context/AuthContext';
 
 // Local copy of shared contract types for Notifications
 const NOTIFICATION_TYPES = ['assignment', 'comment', 'review_request', 'review_decision', 'mention', 'status_change'] as const;
@@ -66,7 +67,7 @@ export default function NotificationBell({ className, pollIntervalMs = 30000, li
 
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications/unread-count', { credentials: 'include' });
+      const res = await authFetch('/api/notifications/unread-count');
       if (!res.ok) throw new Error(`Failed to fetch unread count (${res.status})`);
       const json = (await res.json()) as GetUnreadCountResponse;
       setCount(json.count ?? 0);
@@ -83,7 +84,7 @@ export default function NotificationBell({ className, pollIntervalMs = 30000, li
       const params = new URLSearchParams();
       params.set('limit', String(limit));
       if (unreadOnly) params.set('unread_only', 'true');
-      const res = await fetch(`/api/notifications?${params.toString()}`, { credentials: 'include' });
+      const res = await authFetch(`/api/notifications?${params.toString()}`);
       if (!res.ok) throw new Error(`Failed to fetch notifications (${res.status})`);
       const json = (await res.json()) as GetNotificationsResponse;
       setItems(json.notifications || []);
@@ -139,7 +140,7 @@ export default function NotificationBell({ className, pollIntervalMs = 30000, li
 
   const markAllRead = async () => {
     try {
-      await fetch('/api/notifications/read-all', { method: 'PATCH', credentials: 'include' });
+      await authFetch('/api/notifications/read-all', { method: 'PATCH' });
       setItems((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })));
       setCount(0);
     } catch (e) {
@@ -149,7 +150,7 @@ export default function NotificationBell({ className, pollIntervalMs = 30000, li
 
   const markOneRead = async (id: string) => {
     try {
-      await fetch(`/api/notifications/${id}/read`, { method: 'PATCH', credentials: 'include' });
+      await authFetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
       setItems((prev) => prev.map((n) => (n.id === id ? { ...n, readAt: new Date().toISOString() } : n)));
       setCount((c) => Math.max(0, c - 1));
     } catch (e) {
