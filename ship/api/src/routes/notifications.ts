@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import type pg from 'pg';
 import { randomUUID } from 'crypto';
+import { createAuthMiddleware } from '../middleware/auth.js';
 
 // === SHARED CONTRACT (ALL WORKERS MUST MATCH EXACTLY) ===
 
@@ -58,25 +59,13 @@ interface Notification {
 export function createNotificationsRouter(pool: pg.Pool): express.Router {
   const router = express.Router();
 
+  const auth = createAuthMiddleware(pool);
+  router.use(auth);
+
   function isValidUUID(v?: string): boolean {
     if (!v) return false;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
   }
-
-  function getAuthUserId(req: Request): string | undefined {
-    const userId: string | undefined = (req as any).user?.id || (req as any).auth?.userId;
-    return isValidUUID(userId) ? (userId as string) : undefined;
-  }
-
-  function requireAuth(req: Request, res: Response, next: express.NextFunction) {
-    const userId = getAuthUserId(req);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    return next();
-  }
-
-  router.use(requireAuth);
 
   function mapRow(row: any): Notification {
     return {
@@ -95,7 +84,7 @@ export function createNotificationsRouter(pool: pg.Pool): express.Router {
   // GET /api/notifications
   router.get('/', async (req: Request, res: Response) => {
     try {
-      const userId = getAuthUserId(req)!;
+      const userId = req.user!.id;
 
       const unreadOnlyRaw = String((req.query.unread_only ?? req.query.unreadOnly) ?? '').toLowerCase();
       const unreadOnly = unreadOnlyRaw === 'true' || unreadOnlyRaw === '1';
@@ -136,7 +125,7 @@ export function createNotificationsRouter(pool: pg.Pool): express.Router {
   // GET /api/notifications/unread-count
   router.get('/unread-count', async (req: Request, res: Response) => {
     try {
-      const userId = getAuthUserId(req)!;
+      const userId = req.user!.id;
       const { rows } = await pool.query(
         'SELECT COUNT(*)::int AS cnt FROM notifications WHERE user_id = $1 AND read_at IS NULL',
         [userId]
@@ -153,7 +142,7 @@ export function createNotificationsRouter(pool: pg.Pool): express.Router {
   // POST /api/notifications
   router.post('/', async (req: Request, res: Response) => {
     try {
-      const authUserId = getAuthUserId(req)!;
+      const authUserId = req.user!.id;
       const body = req.body || {};
 
       const userId: string | undefined = body.userId ?? body.user_id ?? authUserId;
@@ -204,7 +193,7 @@ export function createNotificationsRouter(pool: pg.Pool): express.Router {
   // PATCH /api/notifications/:id/read
   router.patch('/:id/read', async (req: Request, res: Response) => {
     try {
-      const userId = getAuthUserId(req)!;
+      const userId = req.user!.id;
       const id = req.params.id as string;
       if (!isValidUUID(id)) {
         return res.status(400).json({ error: 'Invalid notification id' });
@@ -231,7 +220,7 @@ export function createNotificationsRouter(pool: pg.Pool): express.Router {
   // PATCH /api/notifications/read-all
   router.patch('/read-all', async (req: Request, res: Response) => {
     try {
-      const userId = getAuthUserId(req)!;
+      const userId = req.user!.id;
       await pool.query('UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL', [userId]);
       return res.status(200).json({});
     } catch (err) {

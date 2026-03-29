@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import type pg from 'pg';
 import { randomUUID } from 'crypto';
+import { createAuthMiddleware } from '../middleware/auth.js';
 
 // === SHARED CONTRACT (ALL WORKERS MUST MATCH EXACTLY) ===
 
@@ -96,24 +97,11 @@ function isValidUUID(v?: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
-function getAuthUserId(req: Request): string | undefined {
-  const userId: string | undefined = (req as any).user?.id || (req as any).auth?.userId;
-  return isValidUUID(userId) ? userId : undefined;
-}
-
-function requireAuth(req: Request, res: Response, next: express.NextFunction) {
-  const userId = getAuthUserId(req);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  return next();
-}
-
 export function createSprintReviewsRouter(pool: pg.Pool): express.Router {
   const router = express.Router();
 
-  // All sprint review routes require authentication
-  router.use(requireAuth);
+  const auth = createAuthMiddleware(pool);
+  router.use(auth);
 
   // GET /api/sprint-reviews
   router.get('/', async (req: Request, res: Response) => {
@@ -198,8 +186,7 @@ export function createSprintReviewsRouter(pool: pg.Pool): express.Router {
   // POST /api/sprint-reviews
   router.post('/', async (req: Request, res: Response) => {
     try {
-      const userId = getAuthUserId(req);
-      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+      const userId = req.user!.id;
 
       const { weekId, summary, accomplishments, challenges, nextSteps, teamRating } = (req.body || {}) as CreateSprintReviewRequest;
 

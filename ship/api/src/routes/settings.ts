@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import type pg from 'pg';
 import { randomUUID } from 'crypto';
+import { createAuthMiddleware } from '../middleware/auth.js';
 
 // === SHARED CONTRACT (ALL WORKERS MUST MATCH EXACTLY) ===
 
@@ -45,26 +46,8 @@ interface UserSettings {
 export function createSettingsRouter(pool: pg.Pool): express.Router {
   const router = express.Router();
 
-  // Auth helpers (copied pattern from other routes)
-  function isValidUUID(v?: string): boolean {
-    if (!v) return false;
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
-  }
-
-  function getAuthUserId(req: Request): string | undefined {
-    const userId: string | undefined = (req as any).user?.id || (req as any).auth?.userId;
-    return isValidUUID(userId) ? userId as string : undefined;
-  }
-
-  function requireAuth(req: Request, res: Response, next: express.NextFunction) {
-    const userId = getAuthUserId(req);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    return next();
-  }
-
-  router.use(requireAuth);
+  const auth = createAuthMiddleware(pool);
+  router.use(auth);
 
   const DEFAULTS: Omit<UserSettings, 'id' | 'userId' | 'updatedAt'> = {
     theme: 'system',
@@ -92,7 +75,7 @@ export function createSettingsRouter(pool: pg.Pool): express.Router {
   // GET /api/settings
   router.get('/', async (req: Request, res: Response) => {
     try {
-      const userId = getAuthUserId(req)!;
+      const userId = req.user!.id;
 
       const { rows } = await pool.query(
         `SELECT ${DB_COLUMNS.id}, ${DB_COLUMNS.user_id}, ${DB_COLUMNS.theme}, ${DB_COLUMNS.notifications_enabled},
@@ -135,7 +118,7 @@ export function createSettingsRouter(pool: pg.Pool): express.Router {
   // PUT /api/settings
   router.put('/', async (req: Request, res: Response) => {
     try {
-      const userId = getAuthUserId(req)!;
+      const userId = req.user!.id;
       const { theme, notificationsEnabled, emailDigest, defaultView, timezone } = (req.body || {}) as Partial<UserSettings>;
 
       // Validate

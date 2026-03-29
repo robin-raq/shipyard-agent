@@ -2,6 +2,7 @@ import express from "express";
 import type { Request, Response } from "express";
 import type pg from "pg";
 import { randomUUID } from "crypto";
+import { createAuthMiddleware } from "../middleware/auth.js";
 
 // === SHARED CONTRACT (ALL WORKERS MUST MATCH EXACTLY) ===
 
@@ -35,21 +36,8 @@ interface UserSettings {
 export function createSetupRouter(pool: pg.Pool): express.Router {
   const router = express.Router();
 
-  // Auth helpers (follow existing pattern; avoid local UUID regex helpers)
-  function getAuthUserId(req: Request): string | undefined {
-    const userId: string | undefined = (req as any).user?.id || (req as any).auth?.userId;
-    return typeof userId === 'string' && userId.length > 0 ? userId : undefined;
-  }
-
-  function requireAuth(req: Request, res: Response, next: express.NextFunction) {
-    const userId = getAuthUserId(req);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    return next();
-  }
-
-  router.use(requireAuth);
+  const auth = createAuthMiddleware(pool);
+  router.use(auth);
 
   // Helpers
   function mapCompleted(row: any | undefined): boolean {
@@ -62,7 +50,7 @@ export function createSetupRouter(pool: pg.Pool): express.Router {
   // GET /api/setup/status
   router.get('/status', async (req: Request, res: Response) => {
     try {
-      const userId = getAuthUserId(req)!;
+      const userId = req.user!.id;
       // Ensure column exist usage according to contract
       const sql = `SELECT ${SETUP_COMPLETED_COLUMN} FROM ${USER_SETTINGS_TABLE} WHERE user_id = $1 LIMIT 1`;
       const { rows } = await pool.query(sql, [userId]);
@@ -81,7 +69,7 @@ export function createSetupRouter(pool: pg.Pool): express.Router {
   // POST /api/setup/complete
   router.post('/complete', async (req: Request, res: Response) => {
     try {
-      const userId = getAuthUserId(req)!;
+      const userId = req.user!.id;
 
       // Check if settings row exists
       const { rows } = await pool.query(`SELECT id FROM ${USER_SETTINGS_TABLE} WHERE user_id = $1 LIMIT 1`, [userId]);

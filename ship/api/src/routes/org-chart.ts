@@ -1,32 +1,20 @@
 import express from 'express';
 import type { Request, Response, Router } from 'express';
 import type pg from 'pg';
+import { createAuthMiddleware } from '../middleware/auth.js';
 
 // === SHARED CONTRACT (ALL WORKERS MUST MATCH EXACTLY) ===
 // Backend function to create router
 export function createOrgChartRouter(pool: pg.Pool): Router {
   const router = express.Router();
 
-  // Auth helpers (copied pattern from other routes)
+  const auth = createAuthMiddleware(pool);
+  router.use(auth);
+
   function isValidUUID(v?: string): boolean {
     if (!v) return false;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
   }
-
-  function getAuthUserId(req: Request): string | undefined {
-    const userId: string | undefined = (req as any).user?.id || (req as any).auth?.userId;
-    return isValidUUID(userId) ? (userId as string) : undefined;
-  }
-
-  function requireAuth(req: Request, res: Response, next: express.NextFunction) {
-    const userId = getAuthUserId(req);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    return next();
-  }
-
-  router.use(requireAuth);
 
   // Types for internal mapping
   interface UserNode {
