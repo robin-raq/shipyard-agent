@@ -460,12 +460,19 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
     retry_counts = dict(state.get("retry_counts", {}))
     task_retries = retry_counts.get(f"exec_{index}", 0)
 
+    # Cap worker iterations to prevent infinite agent→tools loops.
+    # 50 steps ≈ 25 tool calls. Most tasks complete in 5-12 tool calls.
+    worker_config = {"recursion_limit": 50}
+
     try:
-        result = worker_graph.invoke({
-            "messages": [HumanMessage(content=task["description"])],
-            "context": prior_context,
-            "trace_steps": [],
-        })
+        result = worker_graph.invoke(
+            {
+                "messages": [HumanMessage(content=task["description"])],
+                "context": prior_context,
+                "trace_steps": [],
+            },
+            config=worker_config,
+        )
         worker_response = result["messages"][-1].content
 
         # Detect truncated output (max_tokens hit)
@@ -501,6 +508,15 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
         tasks[index] = {**task, "status": "done", "result": worker_response}
     except Exception as e:
         error_msg = str(e)
+
+        # Detect recursion limit (worker looped too many times)
+        if "recursion limit" in error_msg.lower() or "GraphRecursionError" in error_msg:
+            tasks[index] = {
+                **task,
+                "status": "done",
+                "result": f"Worker hit iteration limit (50 steps). Partial work may have been saved to disk.",
+            }
+            return {"tasks": tasks, "current_task_index": index + 1, "token_usage": token_usage}
 
         # Detect token limit errors from API
         if ("max_tokens" in error_msg.lower() or "output limit" in error_msg.lower()) and task_retries < 1:
@@ -613,7 +629,7 @@ def verify_task(state: SupervisorState) -> dict:
     # Step 2: Run vitest (only if tsc passed)
     try:
         test_result = subprocess.run(
-            ["npx", "vitest", "run", "--reporter=verbose", "--bail", "--passWithNoTests"],
+            ["npx", "vitest", "run", "--reporter=verbose", "--bail=1", "--passWithNoTests"],
             cwd=check_dir,
             capture_output=True,
             timeout=120,
@@ -664,6 +680,130 @@ def _check_cross_boundary_consistency(workspace_root) -> list[str]:
     return warnings
 
 
+def _auto_wire_routes(workspace_root) -> list[str]:
+    """Scan for route files not registered in app.ts and add them.
+
+    Returns list of actions taken.
+    """
+    from pathlib import Path
+
+    actions = []
+    app_file = Path(workspace_root) / "ship" / "api" / "src" / "app.ts"
+    route_dir = Path(workspace_root) / "ship" / "api" / "src" / "routes"
+
+    if not app_file.exists() or not route_dir.exists():
+        return actions
+
+    app_content = app_file.read_text(errors="replace")
+
+    for route_file in sorted(route_dir.glob("*.ts")):
+        stem = route_file.stem
+        # Skip index, health, swagger, and files already imported
+        if stem in ("index", "health", "swagger"):
+            continue
+
+        # Check if already imported
+        if f"from \"./routes/{stem}" in app_content:
+            continue
+
+        # Derive function name: teams -> createTeamsRouter, sprint-reviews -> createSprintReviewsRouter
+        parts = stem.split("-")
+        camel = "".join(p.capitalize() for p in parts)
+        func_name = f"create{camel}Router"
+        api_path = f"/api/{stem}"
+
+        # Verify the file actually exports this function
+        file_content = route_file.read_text(errors="replace")
+        if func_name not in file_content:
+            continue
+
+        # Add import after last import line
+        import_line = f'import {{ {func_name} }} from "./routes/{stem}.js";'
+        route_line = f'  app.use("{api_path}", {func_name}(pool));'
+
+        # Find insertion points
+        lines = app_content.splitlines()
+        last_import_idx = 0
+        last_route_idx = 0
+        for i, line in enumerate(lines):
+            if line.strip().startswith("import "):
+                last_import_idx = i
+            if 'app.use("/api/' in line:
+                last_route_idx = i
+
+        lines.insert(last_import_idx + 1, import_line)
+        # Adjust for the inserted import line
+        lines.insert(last_route_idx + 2, route_line)
+
+        app_content = "\n".join(lines) + "\n"
+        actions.append(f"Wired {api_path} -> {func_name}")
+
+    if actions:
+        app_file.write_text(app_content)
+
+    return actions
+
+
+def _auto_wire_pages(workspace_root) -> list[str]:
+    """Scan for page files not routed in App.tsx and add them.
+
+    Returns list of actions taken.
+    """
+    from pathlib import Path
+
+    actions = []
+    app_tsx = Path(workspace_root) / "ship" / "web" / "src" / "App.tsx"
+    pages_dir = Path(workspace_root) / "ship" / "web" / "src" / "pages"
+
+    if not app_tsx.exists() or not pages_dir.exists():
+        return actions
+
+    app_content = app_tsx.read_text(errors="replace")
+
+    for page_file in sorted(pages_dir.glob("*Page.tsx")):
+        component = page_file.stem  # e.g., "SettingsPage"
+
+        # Check if already imported
+        if f"import {component}" in app_content:
+            continue
+
+        # Derive route path: SettingsPage -> settings, OrgChartPage -> org-chart
+        # Remove "Page" suffix, convert CamelCase to kebab-case
+        name = component.replace("Page", "")
+        route_path = re.sub(r"([a-z])([A-Z])", r"\1-\2", name).lower()
+
+        import_line = f"import {component} from './pages/{component}';"
+        route_line = f'          <Route path="{route_path}" element={{<{component} />}} />'
+
+        lines = app_content.splitlines()
+
+        # Find last page import
+        last_import_idx = 0
+        for i, line in enumerate(lines):
+            if "import " in line and "Page" in line and "from './pages/" in line:
+                last_import_idx = i
+
+        # Find last Route line inside the Layout routes
+        last_route_idx = 0
+        for i, line in enumerate(lines):
+            if '<Route path="' in line and 'element={<' in line and 'Page' in line:
+                last_route_idx = i
+
+        if last_import_idx == 0 or last_route_idx == 0:
+            continue
+
+        lines.insert(last_import_idx + 1, import_line)
+        lines.insert(last_route_idx + 2, route_line)
+
+        app_content = "\n".join(lines) + "\n"
+        actions.append(f"Wired /{route_path} -> {component}")
+
+    if actions:
+        app_tsx.write_text(app_content)
+
+    return actions
+
+
 def check_if_done(state: SupervisorState) -> str:
     """Route back to execute_next_task if tasks remain, else to validate."""
     tasks = state.get("tasks", [])
@@ -683,6 +823,13 @@ def validate(state: SupervisorState) -> dict:
         if task["result"]:
             lines.append(f"   -> {task['result']}")
         lines.append("")
+
+    # Auto-wire any new routes and pages
+    if _workspace_root:
+        for action in _auto_wire_routes(_workspace_root):
+            lines.append(f"**Auto-wired:** {action}")
+        for action in _auto_wire_pages(_workspace_root):
+            lines.append(f"**Auto-wired:** {action}")
 
     # Final integration checks
     if _workspace_root:

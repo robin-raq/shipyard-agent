@@ -571,7 +571,9 @@ def main():
             print(t["prompt"])
         return
 
-    set_workspace(Path.cwd())
+    # Always use the script's directory as workspace root, not CWD
+    # (CWD can shift if user runs `cd ship/web && npx tsc` before this script)
+    set_workspace(Path(__file__).resolve().parent)
     graph = build_supervisor_graph()
     trace_collector = TraceCollector()
     results = []

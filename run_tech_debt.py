@@ -193,7 +193,7 @@ def main():
             print(t["prompt"])
         return
 
-    set_workspace(Path.cwd())
+    set_workspace(Path(__file__).resolve().parent)
     graph = build_supervisor_graph()
     trace_collector = TraceCollector()
     results = []
