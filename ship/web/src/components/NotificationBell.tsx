@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { authFetch } from '../context/AuthContext';
+import { authFetch, useAuth } from '../context/AuthContext';
 
 // Local copy of shared contract types for Notifications
 const NOTIFICATION_TYPES = ['assignment', 'comment', 'review_request', 'review_decision', 'mention', 'status_change'] as const;
@@ -55,6 +55,7 @@ function BellIcon({ filled = false, className }: { filled?: boolean; className?:
 }
 
 export default function NotificationBell({ className, pollIntervalMs = 30000, limit = 10 }: NotificationBellProps) {
+  const { user } = useAuth();
   const [count, setCount] = useState<number>(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -66,6 +67,7 @@ export default function NotificationBell({ className, pollIntervalMs = 30000, li
   const intervalRef = useRef<number | null>(null);
 
   const fetchUnreadCount = useCallback(async () => {
+    if (!user) return;
     try {
       const res = await authFetch('/api/notifications/unread-count');
       if (!res.ok) throw new Error(`Failed to fetch unread count (${res.status})`);
@@ -78,6 +80,7 @@ export default function NotificationBell({ className, pollIntervalMs = 30000, li
   }, []);
 
   const fetchNotifications = useCallback(async () => {
+    if (!user) return;
     try {
       setLoading(true);
       setError(null);

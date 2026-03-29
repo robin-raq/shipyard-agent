@@ -75,6 +75,10 @@ FROM build-shared AS build-web
 ARG CACHE_BUST=1
 RUN echo "Cache bust: $CACHE_BUST"
 
+# Pass Vite env vars into the build
+ARG VITE_FLEETGRAPH_URL=https://fleetgraph-production-89ba.up.railway.app
+ENV VITE_FLEETGRAPH_URL=$VITE_FLEETGRAPH_URL
+
 # Copy web client source
 COPY web ./web
 
