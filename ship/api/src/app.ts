@@ -30,6 +30,11 @@ import { createSprintReviewsRouter } from "./routes/sprint-reviews.js";
 import { createSettingsRouter } from "./routes/settings.js";
 import { createNotificationsRouter } from "./routes/notifications.js";
 import { createOrgChartRouter } from "./routes/org-chart.js";
+import { createMyWeekRouter } from "./routes/my-week.js";
+import { createStatusOverviewRouter } from "./routes/status-overview.js";
+import { createProfileRouter } from "./routes/profile.js";
+import { createInvitationsRouter } from "./routes/invitations.js";
+import { createAssociationsRouter } from "./routes/associations.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,6 +77,11 @@ export function createApp(pool: pg.Pool): Express {
   app.use("/api/settings", createSettingsRouter(pool));
   app.use("/api/notifications", createNotificationsRouter(pool));
   app.use("/api/org-chart", createOrgChartRouter(pool));
+  app.use("/api/my-week", createMyWeekRouter(pool));
+  app.use("/api/status-overview", createStatusOverviewRouter(pool));
+  app.use("/api/profile", createProfileRouter(pool));
+  app.use("/api/invitations", createInvitationsRouter(pool));
+  app.use("/api/associations", createAssociationsRouter(pool));
 
 // API Documentation
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

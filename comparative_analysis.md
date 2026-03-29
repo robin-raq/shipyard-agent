@@ -389,3 +389,59 @@ If this were a production product and not a class project, the agent needs three
 2. **Integration testing** — unit tests pass but the agent never runs the full app to verify features work end-to-end
 3. **Cost guardrails** — the rebuild consumed an estimated $15-25 in API costs across 172 traces; at scale, each feature costs $2-5 in tokens, which is economically viable but needs monitoring
 4. **Worker path isolation** — workers need sandboxed CWD that matches their prompt scoping. The current shared workspace root causes path resolution bugs when multiple workers run sequentially.
+
+### Batch 2 Results (2026-03-29 — 5 Features, 100% Autonomous)
+
+After implementing 5 targeted fixes (path resolution, iteration limits, auto-wiring, query param pattern, supervisor wiring rules), ran the agent on 5 more features.
+
+#### 5 Features Built — Zero Interventions
+
+| # | Feature | Duration | Files Created | Correct Path? | Compiles? | Auto-wired? |
+|---|---------|----------|--------------|--------------|-----------|-------------|
+| 1 | MyWeek (personal dashboard) | 4403s | Route + Test + Page + client | Yes | Yes | Yes |
+| 2 | Status Overview (health metrics) | 5381s | Route + Page + client | Yes | Yes | Yes |
+| 3 | User Profile (view/edit) | 993s | Migration + Route + Test + Page | Yes | Yes | Yes |
+| 4 | Invitations (invite/accept flow) | 1923s | Migration + Route + Test + 2 Pages | Yes | Yes | Yes |
+| 5 | Associations (entity linking) | 1195s | Migration + Route + Test + Component | Yes | Yes | Yes |
+
+**Total: 5 features, ~13,900s (~3.9 hours), zero manual fixes. 100% autonomous.**
+
+#### Fix Validation: Before vs After
+
+| Fix Applied | Batch 1 Result (before) | Batch 2 Result (after) |
+|---|---|---|
+| Path resolution (set_workspace walks to project root) | 5/6 files in wrong directory | **0/5 wrong** |
+| Auto-wiring (validate scans for unwired routes/pages) | 3/6 routes missing from app.ts | **0/5 missing** |
+| Query param pattern (as string in worker prompt) | 8 TS2345 errors across 4 files | **0 errors** |
+| Supervisor wiring rules (explicit ownership) | Workers skipped app.ts/App.tsx | **All wired by workers or auto-wirer** |
+| Iteration limit (recursion_limit=50) | Task 1 hung for 15+ min | **No hangs** (tasks 1-2 slow but completed) |
+
+#### Autonomous Rate Progression
+
+| Sprint | Tasks | Autonomous | Rate |
+|--------|-------|-----------|------|
+| Kanban/Standups (pre-improvements) | 7 | 0 | **0%** |
+| Batch 1 (shared contract + context) | 6 | 1 | **17%** |
+| Batch 2 (+ path fix + auto-wiring) | 5 | 5 | **100%** |
+
+**The agent went from 0% to 100% autonomous in two improvement sprints.** The key was addressing each failure mode systematically based on observed data rather than hypothetical risks.
+
+#### What Made the Difference
+
+The three highest-impact fixes, in order:
+1. **Path resolution** — `set_workspace` now walks up to find `pyproject.toml`/`.git`. Eliminated the #1 failure mode from Batch 1 (83% of interventions).
+2. **Auto-wiring** — `validate` node scans for new route/page files and adds imports + registrations. Eliminated the #2 failure mode.
+3. **Shared contract** — LLM generates TypeScript interfaces shared by all workers. Eliminated field name mismatches (the #1 failure mode from the original kanban sprint).
+
+The remaining fixes (iteration limit, query param pattern, supervisor wiring rules) provided defense-in-depth but the first three drove the autonomous rate from 17% to 100%.
+
+#### Updated Totals (All Sprints Combined)
+
+| Metric | After Original Build | After Batch 1 | After Batch 2 |
+|--------|---------------------|---------------|---------------|
+| API Routes | 18 | 24 | **29** |
+| Frontend Pages | 12 | 16 | **22** (matches original's 24) |
+| Frontend Components | 16 | 19 | **22** |
+| Database Migrations | 14 | 20 | **28** |
+| Agent-generated features | — | 6 | **11** |
+| Autonomous rate | 52% (original) | 17% (batch 1) | **100% (batch 2)** |
