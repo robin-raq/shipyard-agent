@@ -719,6 +719,31 @@ def verify_task(state: SupervisorState) -> dict:
                 "result": task["result"] + "\n\nContract warnings: " + "; ".join(contract_warnings),
             }
 
+    # Check lockfile is in sync if worker modified package.json
+    worker_result = task.get("result", "").lower()
+    if "package.json" in worker_result:
+        try:
+            lockfile_check = subprocess.run(
+                ["pnpm", "install", "--frozen-lockfile"],
+                cwd=_workspace_root / "ship",
+                capture_output=True,
+                timeout=60,
+            )
+            if lockfile_check.returncode != 0:
+                # Lockfile out of date — run pnpm install to fix it
+                subprocess.run(
+                    ["pnpm", "install"],
+                    cwd=_workspace_root / "ship",
+                    capture_output=True,
+                    timeout=120,
+                )
+                tasks[index] = {
+                    **task,
+                    "result": task["result"] + "\n\n⚠️ Lockfile was out of sync — auto-fixed with pnpm install.",
+                }
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
     # Skip full verification if worker only created new files
     if _task_only_created_files(task.get("result", "")):
         return {"tasks": tasks, "retry_counts": retry_counts}

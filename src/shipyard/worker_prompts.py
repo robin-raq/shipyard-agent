@@ -21,6 +21,13 @@ rather than guessing.
 
 6. **Be surgical.** Make the smallest change that satisfies the instruction. \
 Do not rewrite entire files when a targeted edit suffices.
+
+7. **Never add dependencies to package.json without running pnpm install.** \
+If you edit any package.json to add a dependency, you MUST run \
+`run_command("pnpm install")` from the package's directory immediately after. \
+This updates the lockfile. A stale lockfile breaks Docker builds. \
+Also: use current major versions (check with `run_command("pnpm view <package> version")` \
+before adding).
 """
 
 # ---------------------------------------------------------------------------
