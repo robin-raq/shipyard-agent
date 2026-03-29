@@ -7,6 +7,7 @@ export default function Layout() {
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: '🏠' },
+    { path: '/activity', label: 'Activity', icon: '🕒' },
     { path: '/docs', label: 'Documents', icon: '📄' },
     { path: '/issues', label: 'Issues', icon: '🐛' },
     { path: '/projects', label: 'Projects', icon: '📁' },
@@ -15,9 +16,13 @@ export default function Layout() {
     { path: '/standups', label: 'Standups', icon: '📝' },
     { path: '/weekly-plans', label: 'Plans', icon: '📋' },
     { path: '/weekly-retros', label: 'Retros', icon: '🔄' },
+    { path: '/sprint-reviews', label: 'Sprint Reviews', icon: '🏁' },
     { path: '/reviews', label: 'Reviews', icon: '✅' },
     { path: '/ships', label: 'Ships', icon: '⛵' },
     { path: '/programs', label: 'Programs', icon: '🎯' },
+    { path: '/org-chart', label: 'Org Chart', icon: '🏢' },
+    { path: '/notifications', label: 'Notifications', icon: '🔔' },
+    { path: '/settings', label: 'Settings', icon: '⚙️' },
   ];
 
   const isActive = (path: string) => location.pathname.startsWith(path);

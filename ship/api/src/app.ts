@@ -24,6 +24,12 @@ import { createWeeklyPlansRouter } from "./routes/weekly-plans.js";
 import { createWeeklyRetrosRouter } from "./routes/weekly-retros.js";
 import { createReviewsRouter } from "./routes/reviews.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
+import { createActivityRouter } from "./routes/activity.js";
+import { createAttachmentsRouter } from "./routes/attachments.js";
+import { createSprintReviewsRouter } from "./routes/sprint-reviews.js";
+import { createSettingsRouter } from "./routes/settings.js";
+import { createNotificationsRouter } from "./routes/notifications.js";
+import { createOrgChartRouter } from "./routes/org-chart.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,6 +66,12 @@ export function createApp(pool: pg.Pool): Express {
   app.use("/api/weekly-retros", createWeeklyRetrosRouter(pool));
   app.use("/api/reviews", createReviewsRouter(pool));
   app.use("/api/feedback", createFeedbackRouter(pool));
+  app.use("/api/activity", createActivityRouter(pool));
+  app.use("/api/attachments", createAttachmentsRouter(pool));
+  app.use("/api/sprint-reviews", createSprintReviewsRouter(pool));
+  app.use("/api/settings", createSettingsRouter(pool));
+  app.use("/api/notifications", createNotificationsRouter(pool));
+  app.use("/api/org-chart", createOrgChartRouter(pool));
 
 // API Documentation
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

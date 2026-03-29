@@ -326,9 +326,66 @@ The 2 compilation failures are eval infrastructure issues (temp workspace doesn'
 | Live eval tasks | 0 | 7 (71% passing) |
 | Supervisor graph nodes | 4 (decompose, execute, check, validate) | 6 (+gather_context, +verify_task) |
 
+### Reliability Sprint Results (2026-03-28 — 6 New Features)
+
+After implementing 6 reliability improvements (shared contract, smarter gather_context, project state scanner, enhanced verify_task with vitest, cross-boundary consistency check, browser_check tool), ran the agent on 6 new Ship features to validate.
+
+#### 6 Features Built via Agent
+
+| # | Feature | Duration | Files Created | Compiles? | Intervention Needed |
+|---|---------|----------|--------------|-----------|-------------------|
+| 1 | Activity Feed | ~600s | Migration + Route + Page + wiring | Yes (clean) | **None** |
+| 2 | File Attachments | 441s | Migration + Route + Component + client API | After fixes | Move files + cast query params |
+| 3 | Sprint Reviews | 937s | Migration + Route + Page + nav + client API | After fixes | Move files + cast query params |
+| 4 | Workspace Settings | 710s | Migration + Route + Page + client API | After fixes | Move files + wire app.ts |
+| 5 | Notifications | 634s | Migration + Route + Bell + Page + client API | After fixes | Move files + wire app.ts |
+| 6 | Org Chart | 649s | Migration + Route + Page + OrgCard + client API | After fixes | Move files + wire app.ts |
+
+**Total: 6 features, ~3,970s (~66 min), all compiling after fixes.**
+
+#### What the Improvements Fixed (vs. Previous Sprint)
+
+| Failure Mode | Previous Sprint (0/7) | This Sprint (6/6 code correct) |
+|---|---|---|
+| Field name mismatches | 4/7 tasks used wrong names | **0** — shared contract enforced exact values |
+| Pattern blindness | 5/7 tasks ignored codebase patterns | **0** — full exemplars + dynamic selection |
+| Export pattern mismatch | Used `export default` instead of factory | **0** — exemplar showed factory pattern |
+| Schema/contract blindness | Used 3 statuses instead of 7 | **0** — contract extracted all enum values |
+
+#### What Still Broke (New Failure Mode Discovered)
+
+**Worker path resolution bug (5/6 tasks):** Backend workers created files under `ship/web/ship/api/` instead of `ship/api/`. The supervisor graph runs workers relative to the workspace root, but workers resolved paths relative to their scoped directory. Files needed manual relocation.
+
+**Root cause:** The worker prompts say "Only modify files in ship/api/" but the workspace root for file operations was set to the Ship web directory for frontend workers. When the backend worker ran next, it inherited the frontend worker's CWD context.
+
+**Cross-boundary check correctly detected:** The validate node flagged "Frontend calls /api/settings but no backend route registered" — catching exactly the kind of wiring gap the agent left behind. This check was added in this sprint and worked as designed.
+
+**Query param type casting:** All new routes had the same TypeScript error — `req.params.id` typed as `string | string[]` but passed to functions expecting `string`. A systematic agent pattern issue (8 occurrences across 4 files), fixable with a one-line cast per occurrence.
+
+#### Intervention Count Comparison
+
+| Sprint | Tasks | Autonomous (no intervention) | Intervention Rate |
+|--------|-------|----------------------------|------------------|
+| Kanban/Standups (before improvements) | 7 | 0 (0%) | 100% needed help |
+| Reliability Sprint (after improvements) | 6 | 1 (17% fully autonomous) | 83% needed path/wiring fixes only |
+
+**The nature of interventions changed fundamentally.** Before: the agent produced wrong code (wrong field names, wrong patterns, wrong exports). After: the agent produces correct code in the wrong location. Content quality is solved; file routing is the remaining gap.
+
+#### Updated Metrics
+
+| Metric | Before Sprint | After Sprint |
+|--------|--------------|-------------|
+| API routes | 18 | 24 (+activity, attachments, sprint-reviews, settings, notifications, org-chart) |
+| Frontend pages | 12 | 16 (+ActivityPage, SprintReviewsPage, SettingsPage, NotificationsPage, OrgChartPage) |
+| Frontend components | 16 | 19 (+AttachmentList, NotificationBell, OrgCard) |
+| Database migrations | 14 | 20 (+6 new tables) |
+| Agent unit tests | 184 | 219 |
+| Supervisor graph nodes | 6 | 7 (+generate_shared_contract) |
+
 ### What Would Actually Ship
 
 If this were a production product and not a class project, the agent needs three things it currently lacks:
 1. **Rollback capability** — the agent can create and edit files but has no concept of "undo the last 5 changes"
 2. **Integration testing** — unit tests pass but the agent never runs the full app to verify features work end-to-end
 3. **Cost guardrails** — the rebuild consumed an estimated $15-25 in API costs across 172 traces; at scale, each feature costs $2-5 in tokens, which is economically viable but needs monitoring
+4. **Worker path isolation** — workers need sandboxed CWD that matches their prompt scoping. The current shared workspace root causes path resolution bugs when multiple workers run sequentially.

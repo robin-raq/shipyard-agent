@@ -448,3 +448,150 @@ export async function createReview(data: { entity_type: string; entity_id: strin
   });
   return handleResponse(response);
 }
+
+// Activity API
+export interface ActivityLog {
+  id: string;
+  userId: string;
+  action: 'created' | 'updated' | 'deleted' | 'commented' | 'status_changed' | 'assigned';
+  entityType: 'issue' | 'project' | 'document' | 'comment' | 'standup' | 'weekly_plan' | 'weekly_retro';
+  entityId: string;
+  entityTitle: string;
+  metadata: Record<string, any>;
+  createdAt: string;
+}
+
+export interface GetActivitiesResponse {
+  activities: ActivityLog[];
+  total: number;
+}
+
+export async function getActivities(
+  filters?: { limit?: number; offset?: number; entity_type?: string; user_id?: string }
+): Promise<GetActivitiesResponse> {
+  const params = new URLSearchParams();
+  if (filters?.limit !== undefined) params.set('limit', String(filters.limit));
+  if (filters?.offset !== undefined) params.set('offset', String(filters.offset));
+  if (filters?.entity_type) params.set('entity_type', filters.entity_type);
+  if (filters?.user_id) params.set('user_id', filters.user_id);
+  const query = params.toString();
+  const response = await authFetch(`/api/activity${query ? '?' + query : ''}`);
+  return handleResponse(response);
+}
+
+// Sprint Reviews API (shared contract)
+export interface SprintReview {
+  id: string;
+  weekId: string;
+  authorId: string;
+  summary: string;
+  accomplishments: string;
+  challenges: string;
+  nextSteps: string;
+  teamRating: number;
+  status: string;
+  submittedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface GetSprintReviewsQuery {
+  week_id?: string;
+  status?: string;
+  author_id?: string;
+}
+
+export interface CreateSprintReviewRequest {
+  weekId: string;
+  summary: string;
+  accomplishments: string;
+  challenges: string;
+  nextSteps: string;
+  teamRating: number;
+}
+
+export async function getSprintReviews(filters?: GetSprintReviewsQuery): Promise<SprintReview[]> {
+  const params = new URLSearchParams();
+  if (filters?.week_id) params.set('week_id', filters.week_id);
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.author_id) params.set('author_id', filters.author_id);
+  const query = params.toString();
+  const response = await authFetch(`/api/sprint-reviews${query ? '?' + query : ''}`);
+  return handleResponse(response);
+}
+
+export async function createSprintReview(data: CreateSprintReviewRequest): Promise<SprintReview> {
+  const response = await authFetch('/api/sprint-reviews', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function updateSprintReview(id: string, data: Partial<CreateSprintReviewRequest>): Promise<SprintReview> {
+  const response = await authFetch(`/api/sprint-reviews/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function submitSprintReview(id: string): Promise<SprintReview> {
+  const response = await authFetch(`/api/sprint-reviews/${id}/submit`, { method: 'PATCH' });
+  return handleResponse(response);
+}
+
+export async function deleteSprintReview(id: string): Promise<void> {
+  const response = await authFetch(`/api/sprint-reviews/${id}`, { method: 'DELETE' });
+  await handleResponse(response);
+}
+
+// Attachments API (shared contract)
+export interface Attachment {
+  id: string;
+  entityType: string;
+  entityId: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedBy: string;
+  createdAt: string;
+  deletedAt: string | null;
+}
+
+export interface CreateAttachmentRequest {
+  entity_type: string;
+  entity_id: string;
+  filename: string;
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
+export type CreateAttachmentResponse = Attachment;
+export type GetAttachmentsResponse = Attachment[];
+export type DeleteAttachmentResponse = {};
+
+export async function getAttachments(entityType: string, entityId: string): Promise<Attachment[]> {
+  const params = new URLSearchParams({ entity_type: entityType, entity_id: entityId });
+  const response = await fetch(`/api/attachments?${params.toString()}`);
+  return handleResponse(response);
+}
+
+export async function createAttachment(data: CreateAttachmentRequest): Promise<Attachment> {
+  const response = await authFetch('/api/attachments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function deleteAttachment(id: string): Promise<void> {
+  const response = await authFetch(`/api/attachments/${id}`, { method: 'DELETE' });
+  await handleResponse(response);
+}
