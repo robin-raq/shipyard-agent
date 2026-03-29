@@ -1,12 +1,19 @@
 """Tests for the browser_check tool."""
 
-import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from shipyard.tools import browser_check
+from shipyard.tools import browser_check, set_workspace
+
+
+# Set workspace to project root so browser-check.js is found
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class TestBrowserCheck:
+    def setup_method(self):
+        set_workspace(PROJECT_ROOT)
+
     @patch("shipyard.tools.subprocess.run")
     def test_returns_status_and_title(self, mock_run):
         """Parses JSON output from the browser-check script."""

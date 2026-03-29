@@ -27,9 +27,26 @@ COMMAND_TIMEOUT = 120
 
 
 def set_workspace(root: Path) -> None:
-    """Set the workspace root for all file tools."""
+    """Set the workspace root for all file tools.
+
+    If root appears to be a subdirectory of the project (e.g., ship/web),
+    walks up to find the actual project root (contains pyproject.toml or .git).
+    """
     global _workspace_root
-    _workspace_root = root.resolve()
+    resolved = root.resolve()
+
+    # Walk up to find the real project root
+    candidate = resolved
+    for _ in range(5):
+        if (candidate / "pyproject.toml").exists() or (candidate / ".git").exists():
+            resolved = candidate
+            break
+        parent = candidate.parent
+        if parent == candidate:
+            break
+        candidate = parent
+
+    _workspace_root = resolved
 
 
 def _resolve_safe(path: str) -> Path | None:

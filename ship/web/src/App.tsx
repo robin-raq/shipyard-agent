@@ -20,6 +20,16 @@ import WeeklyPlansPage from './pages/WeeklyPlansPage';
 import WeeklyRetrosPage from './pages/WeeklyRetrosPage';
 import ReviewsPage from './pages/ReviewsPage';
 import PublicFeedbackPage from './pages/PublicFeedbackPage';
+import ActivityPage from './pages/ActivityPage';
+import SprintReviewsPage from './pages/SprintReviewsPage';
+import SettingsPage from './pages/SettingsPage';
+import NotificationsPage from './pages/NotificationsPage';
+import OrgChartPage from './pages/OrgChartPage';
+import MyWeekPage from './pages/MyWeekPage';
+import StatusOverviewPage from './pages/StatusOverviewPage';
+import ProfilePage from './pages/ProfilePage';
+import InvitationsPage from './pages/InvitationsPage';
+import AcceptInvitePage from './pages/AcceptInvitePage';
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
@@ -53,9 +63,18 @@ function ProtectedRoutes() {
           <Route path="standups" element={<StandupsPage />} />
           <Route path="weekly-plans" element={<WeeklyPlansPage />} />
           <Route path="weekly-retros" element={<WeeklyRetrosPage />} />
+          <Route path="sprint-reviews" element={<SprintReviewsPage />} />
           <Route path="reviews" element={<ReviewsPage />} />
+          <Route path="activity" element={<ActivityPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="org-chart" element={<OrgChartPage />} />
           <Route path="programs" element={<ProgramsPage />} />
           <Route path="programs/:id" element={<ProgramDetailPage />} />
+          <Route path="my-week" element={<MyWeekPage />} />
+          <Route path="status" element={<StatusOverviewPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="invitations" element={<InvitationsPage />} />
           <Route path=":type/:id" element={<DocumentDetailPage />} />
         </Route>
       </Routes>
@@ -78,6 +97,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/feedback" element={<PublicFeedbackPage />} />
+      <Route path="/invite/accept/:token" element={<AcceptInvitePage />} />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );

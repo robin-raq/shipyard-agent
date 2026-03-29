@@ -342,16 +342,18 @@ Runs locally via `python -m shipyard`. Not deployed (local-only per PRD Phase 1 
 
 | Metric | Value |
 |--------|-------|
-| Total commits | 96 |
-| Agent-generated commits | 23 |
-| LangSmith traces | 214+ |
-| Local JSON traces | 214 files |
-| Agent test count | 184 (12 test files) |
+| Total commits | 98+ |
+| Agent-generated commits | 29 |
+| LangSmith traces | 220+ |
+| Local JSON traces | 220 files |
+| Agent test count | 219 (15 test files) |
 | Ship app test files | 114 |
-| Ship source lines | 27,890 |
-| Original Ship lines | 122,920 (23% coverage) |
-| Human interventions | 19 |
-| API cost (blended) | ~$5.10 (Sonnet + GPT-4o-mini) |
+| Ship API routes | 24 |
+| Ship frontend pages | 16 |
+| Database migrations | 20 |
+| Original Ship lines | 122,920 |
+| Human interventions | 19 (original) + 5 path fixes (reliability sprint) |
+| API cost (blended) | ~$10 (Sonnet + GPT-4o/4o-mini) |
 | Deployed URL | https://ship-app-production-fd9d.up.railway.app |
 
 ---

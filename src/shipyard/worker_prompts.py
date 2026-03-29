@@ -41,6 +41,11 @@ Domain knowledge:
 - WebSocket setup with ws or socket.io
 - PostgreSQL queries via pg or knex
 
+TypeScript patterns to follow:
+- Use `const id = req.params.id as string;` (not destructuring) for route params
+- Use `const val = req.query.field as string | undefined;` for query params
+- Do NOT define local isValidUUID helpers — use direct type guards instead
+
 {_BASE_RULES}
 """
 
@@ -143,6 +148,17 @@ Return ONLY a JSON code block with an array of task objects:
   {"worker": "frontend", "description": "Fix bug #4: client.ts createTeam/updateTeam send content instead of description"}
 ]
 ```
+
+## Wiring Rules (CRITICAL)
+
+- **Backend worker** is responsible for: creating routes AND registering them in \
+ship/api/src/app.ts (import + app.use line). Always include app.ts wiring in the \
+backend task description.
+- **Frontend worker** is responsible for: creating pages/components AND adding \
+routes in ship/web/src/App.tsx AND adding nav items in ship/web/src/components/Layout.tsx. \
+Always include App.tsx and Layout.tsx wiring in the frontend task description.
+- Do NOT create separate tasks for wiring — include wiring in the same task as \
+the route or page creation.
 
 ## Rules
 
