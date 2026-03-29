@@ -8,12 +8,19 @@ export function createWeeksRouter(pool: pg.Pool): Router {
   router.get("/", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const query = `
-        SELECT 
+        SELECT
           w.id,
           w.title,
-          w.status,
+          w.content,
           w.start_date,
           w.end_date,
+          w.created_at,
+          w.updated_at,
+          CASE
+            WHEN w.start_date <= CURRENT_DATE AND w.end_date >= CURRENT_DATE THEN 'active'
+            WHEN w.end_date < CURRENT_DATE THEN 'completed'
+            ELSE 'planned'
+          END AS status,
           EXISTS(SELECT 1 FROM weekly_plans WHERE week_id = w.id) AS has_plan
         FROM weeks w
         WHERE w.deleted_at IS NULL
