@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { authFetch } from '../context/AuthContext';
 
 // === SHARED CONTRACT (Front-end local copy) ===
 const THEME_VALUES = ['light', 'dark', 'system'] as const;
@@ -65,7 +66,7 @@ export default function SettingsPage() {
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch('/api/settings', { credentials: 'include' });
+        const res = await authFetch('/api/settings');
         if (!res.ok) throw new Error(`Failed to load settings (${res.status})`);
         const data = (await res.json()) as GetUserSettingsResponse | UserSettings; // support either shape
         const settings: UserSettings = (data as any).settings ?? (data as any);
@@ -109,10 +110,9 @@ export default function SettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/settings', {
+      const res = await authFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error(`Failed to save settings (${res.status})`);

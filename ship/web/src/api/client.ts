@@ -784,7 +784,7 @@ export async function getActivities(filters?: { limit?: number; offset?: number;
   if (filters?.offset) params.set('offset', String(filters.offset));
   if (filters?.entity_type) params.set('entity_type', filters.entity_type);
   const query = params.toString();
-  const response = await authFetch(`/api/activities${query ? '?' + query : ''}`);
+  const response = await authFetch(`/api/activity${query ? '?' + query : ''}`);
   return handleResponse(response);
 }
 

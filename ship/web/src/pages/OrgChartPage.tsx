@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { authFetch } from '../context/AuthContext';
 
 // Shared contract (local copy)
 interface User {
@@ -69,7 +70,7 @@ export default function OrgChartPage() {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch('/api/org-chart', { credentials: 'include' });
+        const res = await authFetch('/api/org-chart');
         if (!res.ok) throw new Error(`Failed to fetch org chart (${res.status})`);
         const json = (await res.json()) as OrgChartResponse;
         if (!cancelled) {
@@ -145,7 +146,7 @@ export default function OrgChartPage() {
                 // manual refresh
                 setLoading(true);
                 setError(null);
-                fetch('/api/org-chart', { credentials: 'include' })
+                authFetch('/api/org-chart')
                   .then((r) => {
                     if (!r.ok) throw new Error(`Failed to fetch org chart (${r.status})`);
                     return r.json();
