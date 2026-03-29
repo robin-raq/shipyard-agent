@@ -522,3 +522,61 @@ The embedded FleetGraph type definitions in the prompts worked — the agent use
 | Batch 3 (+ smart verify + FleetGraph) | 13 | Mixed (CRUD + edits + integration) | 11 | **85%** |
 
 The drop from 100% to 85% is expected — Batch 3 included fundamentally harder tasks (editing existing files, cross-file coordination). The 100% rate on new-file tasks held.
+
+### Post-Deploy Fixes (2026-03-29 — Production Issues)
+
+After deploying Batch 3 to Railway, 6 categories of production issues were discovered that the agent's local verification didn't catch.
+
+#### Issues Found and Fixed
+
+| # | Issue | Root Cause | Fix | Agent's Fault? |
+|---|-------|-----------|-----|----------------|
+| 1 | `api_tokens` table does not exist (500) | Agent created the route (`api-tokens.ts`) but never created migration `031_create_api_tokens.sql` | Created the missing migration | **Yes** — missed a file |
+| 2 | 401 on notifications, org-chart, sprint-reviews, settings | 4 components used raw `fetch()` instead of `authFetch()`, so session token wasn't sent | Replaced `fetch` with `authFetch` in NotificationsPage, NotificationBell, OrgCard, AttachmentList | **Yes** — inconsistent auth pattern |
+| 3 | `column w.status does not exist` on weeks page (500) | Agent added `w.status` to weeks query for FleetGraph compatibility, but weeks table has no status column | Replaced with computed CASE expression based on dates | **Yes** — referenced nonexistent column |
+| 4 | FleetGraph approvals `ERR_CONNECTION_REFUSED` | Frontend defaults to `localhost:4000` for FleetGraph URL; env var `VITE_FLEETGRAPH_URL` not set in Railway | Set env var in Railway (infrastructure, not code) | **No** — deployment config |
+| 5 | Docker build failed: `pnpm-lock.yaml out of date` | Agent added `happy-dom@^13.10.2` to package.json (version doesn't exist) without running `pnpm install` | Fixed version to `^20.8.0`, ran `pnpm install` to sync lockfile | **Yes** — hallucinated version |
+| 6 | Migrations 013/019 failing on deploy | Existing issue data had `blocked`/NULL statuses that violated new CHECK constraint | Created migration 033 to force-fix all statuses, then migration 012 for NULL handling | **Partially** — pre-existing data issue |
+
+#### What This Reveals About Deployment Gaps
+
+The agent's verification (`tsc --noEmit` + smart verify) catches **compile-time** errors but misses **deploy-time** and **runtime** errors:
+
+| Error Category | Caught by tsc? | Caught by vitest? | Caught by deploy? | How to prevent |
+|---------------|----------------|-------------------|-------------------|----------------|
+| Missing migration file | No | No | Yes (500 at runtime) | Post-task check: every route that queries a table should have a corresponding migration |
+| Wrong auth function (fetch vs authFetch) | No | No | Yes (401 at runtime) | Lint rule or worker prompt enforcement |
+| Nonexistent column in SQL | No | No | Yes (500 at runtime) | Test that queries against real DB schema |
+| Hallucinated package version | No | No | Yes (build failure) | **Fixed**: worker prompt rule 7 + lockfile check in verify_task |
+| Stale lockfile | No | No | Yes (build failure) | **Fixed**: verify_task now runs `pnpm install --frozen-lockfile` |
+| Missing env vars | No | No | Yes (connection refused) | Deployment checklist / env var validation at startup |
+
+**Key insight:** The gap between "compiles locally" and "works in production" is the largest remaining weakness. The agent produces code that passes TypeScript compilation but fails at runtime because:
+1. SQL queries reference columns/tables that don't exist
+2. Auth patterns are inconsistent (some use `authFetch`, others use raw `fetch`)
+3. Package versions are hallucinated without verification
+
+#### Preventive Measures Implemented
+
+1. **Worker prompt rule 7**: "Never add dependencies without running `pnpm install` and checking the version exists first"
+2. **verify_task lockfile guard**: If worker output mentions `package.json`, automatically runs `pnpm install --frozen-lockfile` and fixes if out of sync
+3. **Migration 033**: Force-fix pattern for data integrity issues
+
+#### Still Needed (Not Yet Implemented)
+
+1. **Runtime verification**: Start the app in verify_task, curl the new endpoints, check for 200s
+2. **Migration-route consistency check**: Every route that creates a table should have a migration, and vice versa
+3. **Auth pattern linting**: Grep for raw `fetch('/api/` in frontend files — all should use `authFetch`
+4. **Package version validation**: `pnpm view <package> version` before adding to package.json
+
+#### Updated Intervention Counts
+
+| Sprint | Tasks | Code Autonomous | Post-Deploy Fixes | Total Interventions |
+|--------|-------|----------------|-------------------|-------------------|
+| Kanban | 7 | 0% | N/A | 7 |
+| Batch 1 | 6 | 17% | 5 (path fixes) | 10 |
+| Batch 2 | 5 | 100% | 0 | 0 |
+| Batch 3 | 13 | 85% | 6 (auth, migration, lockfile, schema) | 8 |
+| **Total** | **31** | **55% fully autonomous** | **11 post-deploy fixes** | **25 total interventions** |
+
+The agent is excellent at generating correct TypeScript that compiles — but "compiles" ≠ "works in production." The next improvement frontier is **runtime verification**, not better code generation.
