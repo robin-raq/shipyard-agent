@@ -13,6 +13,7 @@ BEGIN
     EXECUTE 'UPDATE issues SET status = ''cancelled'' WHERE status = ''closed''';
     EXECUTE 'UPDATE issues SET status = ''backlog'' WHERE status = ''blocked''';
     EXECUTE 'UPDATE issues SET status = ''in_progress'' WHERE status NOT IN (''triage'', ''backlog'', ''todo'', ''in_progress'', ''in_review'', ''done'', ''cancelled'')';
+    EXECUTE 'UPDATE issues SET status = ''triage'' WHERE status IS NULL';
 
     -- 3) Add the new constraint after data has been migrated
     EXECUTE 'ALTER TABLE issues ADD CONSTRAINT issues_status_check CHECK (status IN (''triage'', ''backlog'', ''todo'', ''in_progress'', ''in_review'', ''done'', ''cancelled''))';
