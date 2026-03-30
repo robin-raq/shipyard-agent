@@ -2,25 +2,23 @@
 
 ## 1. Development Costs (Actual)
 
-### Token Usage (from LangSmith, last 100 traced runs)
+### Token Usage
 
 | Metric | Value |
 |--------|-------|
-| Input tokens | 1,387,432 |
-| Output tokens | 10,340 |
-| Total tokens | 1,397,772 |
-| Total traced runs | 214+ |
-| Runs sampled for cost | 100 |
+| Total traced runs | 243+ |
+| Total agent-generated features | 24 |
+| Total batch sprints | 4 |
 
 ### Cost Breakdown by Model
 
 | Model | Role | Input Cost ($/M) | Output Cost ($/M) | Est. Usage | Est. Cost |
 |-------|------|------------------|--------------------|-----------|-----------|
-| Claude Sonnet 4.5 | Backend/Frontend workers, single-agent | $3.00 | $15.00 | ~70% of runs | ~$3.02 |
-| GPT-4o-mini | Supervisor, Shared/DB workers | $0.15 | $0.60 | ~30% of runs | ~$0.08 |
-| **Total** | | | | | **~$3.10** |
-
-Note: The $4.32 figure from LangSmith applies Sonnet pricing to all runs. Actual cost is lower because ~30% of runs used GPT-4o-mini at ~20x cheaper rates.
+| Claude Sonnet 4.5 | Single-agent, early workers | $3.00 | $15.00 | ~30% of runs | ~$3.50 |
+| GPT-4o-mini | Supervisor, shared/DB workers | $0.15 | $0.60 | ~20% of runs | ~$0.10 |
+| GPT-4o | Workers in batches 1-3 | $2.50 | $10.00 | ~30% of runs | ~$5.00 |
+| GPT-5 | Backend/frontend workers (batch 3) | $3.00 | $15.00 | ~20% of runs | ~$4.00 |
+| **Total API cost** | | | | **243 runs** | **~$12.60** |
 
 ### Cost by Development Phase
 
@@ -31,8 +29,13 @@ Note: The $4.32 figure from LangSmith applies Sonnet pricing to all runs. Actual
 | Ship Scaffold | Mar 25 | ~20 | ~$0.60 | Initial monorepo, CRUD, Docker |
 | Ship Features | Mar 26 | ~80 | ~$2.40 | 10 features in parallel (TDD) |
 | Bug Fixes/Deploy | Mar 26–27 | ~29 | ~$0.70 | Fixes, hallucination guard, Railway |
-| Agent Improvements | Mar 28 | ~40 | ~$1.40 | Kanban, standups, gather_context, live evals |
-| **Total** | | **~214** | **~$6.50** | |
+| Kanban Sprint | Mar 28 | ~15 | ~$0.50 | 7 kanban+standups tasks |
+| Agent Improvements | Mar 28 | ~10 | ~$0.40 | gather_context, contract, verify_task |
+| Batch 1 (6 features) | Mar 28 | ~20 | ~$1.50 | Activity, attachments, sprint reviews, settings, notifications, org chart |
+| Batch 2 (5 features) | Mar 29 | ~15 | ~$1.50 | MyWeek, status overview, profile, invitations, associations |
+| Batch 3 (13 features) | Mar 29 | ~30 | ~$3.00 | FleetGraph, admin, middleware, backlinks, tokens, setup, iterations |
+| Test Generation | Mar 29 | ~10 | ~$0.60 | Tests for 5 routes missing coverage |
+| **Total** | | **~274** | **~$12.60** | |
 
 ### Infrastructure Costs
 
@@ -44,7 +47,7 @@ Note: The $4.32 figure from LangSmith applies Sonnet pricing to all runs. Actual
 | GitHub | $0.00 | Free public repo |
 | **Total infra** | **$0.00** | All within free tiers |
 
-### Total Development Cost: ~$6.50
+### Total Development Cost: ~$13
 
 ---
 
@@ -54,59 +57,61 @@ Note: The $4.32 figure from LangSmith applies Sonnet pricing to all runs. Actual
 
 - 10 invocations/user/day
 - Average invocation: 4,000 input tokens + 2,000 output tokens
-- Claude Sonnet pricing: $3/M input, $15/M output
-- 70% Claude Sonnet / 30% GPT-4o-mini split (as built)
+- 60% GPT-4o / 20% GPT-4o-mini / 20% Claude Sonnet split
+- Role-scoped context reduces tokens ~60% vs full context
 
 ### Per-Invocation Cost
 
 | Model | Input Cost | Output Cost | Blended | Weight | Weighted |
 |-------|-----------|-------------|---------|--------|----------|
-| Claude Sonnet | $0.012 | $0.030 | $0.042 | 70% | $0.029 |
-| GPT-4o-mini | $0.0006 | $0.0012 | $0.0018 | 30% | $0.0005 |
-| **Blended per invocation** | | | | | **$0.030** |
+| GPT-4o | $0.010 | $0.020 | $0.030 | 60% | $0.018 |
+| GPT-4o-mini | $0.0006 | $0.0012 | $0.0018 | 20% | $0.0004 |
+| Claude Sonnet | $0.012 | $0.030 | $0.042 | 20% | $0.008 |
+| **Blended per invocation** | | | | | **$0.027** |
 
 ### Scaling Estimates
 
 | Scale | Users | Daily Invocations | Monthly Cost |
 |-------|-------|-------------------|-------------|
-| Pilot | 10 | 100 | ~$90 |
-| Team | 100 | 1,000 | ~$900 |
-| Department | 1,000 | 10,000 | ~$9,000 |
-| Enterprise | 10,000 | 100,000 | ~$90,000 |
+| Pilot | 10 | 100 | ~$81 |
+| Team | 100 | 1,000 | ~$810 |
+| Department | 1,000 | 10,000 | ~$8,100 |
+| Enterprise | 10,000 | 100,000 | ~$81,000 |
 
 ### Cost Optimization Levers
 
 | Lever | Savings | Tradeoff |
 |-------|---------|----------|
-| **Cache file reads** | 20-30% input tokens | Stale cache risk; invalidate on edit |
-| **Haiku for list_files** | ~5% total cost | Slight latency reduction |
-| **Prompt compression** | 15-25% input tokens | May lose context on long conversations |
-| **Token budget caps** | Hard ceiling | May truncate complex tasks |
-| **Batch similar tasks** | 10-15% per task | Higher latency per batch |
+| **Smart verify (implemented)** | 8.7x fewer verification runs | Misses some edit-time type errors |
+| **Role-scoped context (implemented)** | ~60% fewer context tokens | Workers see less of the codebase |
+| **Cache file reads** | 20-30% input tokens | Stale cache risk |
+| **Prompt compression** | 15-25% input tokens | May lose context |
+| **Batch similar tasks** | 10-15% per task | Higher latency |
 
-### Break-Even Analysis
-
-Comparing agent cost vs. developer time for the Ship rebuild:
+### Break-Even vs. Manual Development
 
 | Metric | Agent | Junior Dev (est.) | Senior Dev (est.) |
 |--------|-------|-------------------|-------------------|
-| Time to rebuild | ~6 hours active | ~40 hours | ~20 hours |
-| API cost | $5.10 | $0 | $0 |
-| Labor cost (@$50/hr) | $0 (hobby project) | $2,000 | $1,000 |
-| Total | $5.10 | $2,000 | $1,000 |
-| Lines produced | 16,818 | ~16,818 | ~16,818 |
-| Cost per line | $0.0003 | $0.12 | $0.06 |
+| Time to rebuild | ~10 hours active (6 days) | ~80 hours | ~40 hours |
+| Features built | 24 autonomous + FleetGraph | ~24 | ~24 |
+| API cost | ~$13 | $0 | $0 |
+| Labor cost (@$50/hr) | $0 (project) | $4,000 | $2,000 |
+| Total | ~$13 | $4,000 | $2,000 |
+| Cost per feature | $0.54 | $167 | $83 |
+| Human interventions | 27 | 0 | 0 |
 
-The agent is ~200-400x cheaper per line of code than manual development at market rates. The tradeoff is the 11 human interventions needed — the agent produces volume but requires human judgment for consistency, architecture, and infrastructure.
+The agent is **150-300x cheaper** than manual development. The tradeoff: 27 human interventions for auth patterns, missing files, deployment config, and runtime verification.
 
 ---
 
 ## 3. Cost Anomalies & Lessons
 
-1. **Rate limit hits cost time, not money.** The 450K input tokens/minute rate limit on Anthropic's API caused 5 parallel agent sessions to stall. Each retry was free, but the wall-clock delay was ~15 minutes. Solution: stagger parallel launches by 30 seconds.
+1. **Smart verify saved the most money.** Batch 2 averaged 2,780s/task (full tsc+vitest per worker). Batch 3 averaged 321s/task (skip verify for new files). Same cost per LLM call, 8.7x less wall-clock time and fewer timeout-induced retries.
 
-2. **Hallucination has real cost.** The supervisor hallucination (intervention #6) generated ~10 files that had to be manually deleted. Estimated wasted tokens: ~50K input + ~5K output = ~$0.22. The plan validation gate costs ~$0.01 per run and would have caught it.
+2. **Hallucination costs compound.** The supervisor hallucination (~$0.22 wasted) was cheap. The `happy-dom@^13.10.2` hallucination broke Docker builds for 3 deploy cycles — hours of debugging for a $0.001 LLM output. Prevention (version check) is infinitely cheaper than recovery.
 
-3. **Multi-agent is cheaper per feature than single-agent.** Despite running 4-5 workers per task, multi-agent mode processes more features per dollar because workers share context and the supervisor routes simple tasks to GPT-4o-mini.
+3. **Shared contracts pay for themselves 100x.** One $0.004 LLM call prevented cross-boundary mismatches that previously required $0.30-1.00 in worker retries per failure.
 
-4. **Local trace files are free insurance.** The 174 JSON trace files cost nothing to store and provide full replay capability without querying LangSmith. They're the cheapest debugging tool in the stack.
+4. **Multi-agent is cheaper per feature than sequential single-agent.** Workers share context and the supervisor routes simple tasks to GPT-4o-mini. 13 features in 70 minutes at ~$3 total = $0.23/feature.
+
+5. **Post-deploy fixes are the hidden cost.** The 8 post-deploy interventions (auth, migrations, lockfile, seed data) consumed more human time than the 24 autonomous features saved. Runtime verification would eliminate most of these.

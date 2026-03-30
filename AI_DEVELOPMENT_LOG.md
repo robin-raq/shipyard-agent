@@ -4,129 +4,122 @@
 
 | Tool | Role | How It Was Used |
 |---|---|---|
-| **Claude Sonnet 4.5** | Primary agent LLM | Powers the single-agent loop and backend/frontend workers. Handles complex code generation, surgical edits, and multi-step reasoning. |
-| **GPT-4o-mini** | Cost-optimized tasks | Used for supervisor decomposition, shared types, and database workers — structured tasks where cheaper/faster models suffice. |
-| **LangGraph** | Agent orchestration | StateGraph with manual routing (not create_react_agent). Two modes: single-agent (agent → tools loop) and multi-agent (supervisor → workers). |
-| **LangSmith** | Observability | Auto-tracing via `LANGSMITH_TRACING=true`. All graph invocations traced with tool calls, token usage, and timing. |
-| **Claude Code (CLI)** | Development environment | Used to write the agent itself, manage the codebase, run tests, and iterate on prompts. Meta-level: an AI coding tool building an AI coding tool. |
+| **Claude Sonnet 4.5** | Primary agent LLM | Powers single-agent loop and backend/frontend workers for surgical edits. |
+| **GPT-4o / GPT-5** | Multi-agent workers | Backend/frontend workers in batches 2-3. 5.5x faster than Sonnet per task. |
+| **GPT-4o-mini** | Cost-optimized tasks | Supervisor decomposition, shared types, database workers. ~20x cheaper than Sonnet. |
+| **LangGraph** | Agent orchestration | StateGraph with 7 nodes: decompose → generate_shared_contract → gather_context → execute_next_task → verify_task → check_if_done → validate. |
+| **LangSmith** | Observability | Auto-tracing via `LANGSMITH_TRACING=true`. 243+ traces captured across all sprints. |
+| **Claude Code (CLI)** | Development environment | Wrote the agent itself, managed codebase, iterated on prompts. Meta: an AI coding tool building an AI coding tool. |
 
-**Workflow:** Claude Code wrote the agent code (TDD: tests first, then implementation). The Shipyard agent then used itself to rebuild the Ship app — reading files, making surgical edits, running commands. Human intervention happened when the agent got stuck on environment issues (port conflicts, Docker networking) or made incorrect architectural decisions.
+**Workflow:** Claude Code wrote the agent code (TDD). The Shipyard agent rebuilt the Ship app across 4 batch sprints. Human intervention happened for auth pattern fixes, missing migrations, lockfile desync, and deployment config.
 
 ---
 
 ## 2. Effective Prompts
 
-**Prompt 1 — System prompt core rules (drove correct agent behavior):**
+**Prompt 1 — Core rules (drove correct agent behavior):**
 ```
-1. Always read before editing. Never guess file contents. Call read_file first,
-   then use the exact text you see as your anchor for edit_file.
-2. Use exact anchors. The old_text in edit_file must be copied verbatim from
-   the file. Include enough surrounding context to be unique.
-3. Verify after editing. After each edit, the tool automatically verifies the
-   change landed. If verification fails, re-read the file and try again.
+1. Always read before editing. Never guess file contents.
+2. Use exact anchors — old_text must be copied verbatim.
+3. Verify after editing — re-read the file and confirm.
 ```
-*Why it worked:* The "read before edit" rule eliminated the most common failure mode — the LLM guessing file contents and producing anchors that don't match. Verification after edit catches silent failures.
+*Why it worked:* Eliminated the most common failure mode — LLM guessing file contents.
 
 **Prompt 2 — Supervisor grounding rules (prevented hallucination):**
 ```
-Only decompose what was explicitly requested. Every subtask MUST trace back to
-something the user actually said. Do NOT invent features, endpoints, components,
-or fixes that the user did not ask for. When in doubt, do less.
+Only decompose what was explicitly requested. Every subtask MUST trace back
+to something the user actually said. Do NOT invent features.
 ```
-*Why it worked:* Added after the multi-agent supervisor hallucinated an entire "Ships" feature when asked to fix 5 bugs. These rules reduced creative task invention to near-zero.
+*Why it worked:* Reduced hallucinated task generation to near-zero after the "Ships" feature incident.
 
-**Prompt 3 — Plan validation gate (second LLM call):**
+**Prompt 3 — Shared contract generation (eliminated cross-boundary mismatches):**
 ```
-Compare the original user instruction against the proposed task plan. Your job
-is to REMOVE any tasks that the user did NOT explicitly request. If a task
-invents a new feature, endpoint, or page that the user did not mention, REMOVE it.
+Generate a TypeScript interface contract from the task plan. ALL workers
+must follow these exact field names, enum values, and API shapes.
 ```
-*Why it worked:* Acts as a self-check between decomposition and execution. Catches hallucinated tasks before workers waste tokens executing them.
+*Why it worked:* The #1 failure mode (10/19 interventions) was frontend/backend disagreeing on field names. The shared contract LLM call (~$0.004) gave every worker the same canonical interface.
 
-**Prompt 4 — Specific bug-fix instruction (single-agent, 100% success rate):**
+**Prompt 4 — Worker prompt rule 7 (prevented lockfile desync):**
 ```
-Read the file ship/api/src/routes/teams.ts. The INSERT and UPDATE statements
-use wrong column names — the teams table has columns (name, description) not
-(title, content). Fix all SQL queries in this file to use the correct column
-names. Also fix the SELECT queries if they reference title or content instead
-of name or description.
+Never add dependencies to package.json without running pnpm install.
+Check version exists with pnpm view <package> version before adding.
 ```
-*Why it worked:* Specific file path + exact problem description + clear expected outcome. The agent read the file, found every occurrence, fixed them all, and verified each edit. No ambiguity = no errors.
+*Why it worked:* Agent hallucinated `happy-dom@^13.10.2` (doesn't exist), broke Docker build. This rule + verify_task lockfile check prevents recurrence.
+
+**Prompt 5 — Supervisor wiring rules (ensured app.ts/App.tsx registration):**
+```
+Backend worker is responsible for creating routes AND registering them in
+ship/api/src/app.ts. Frontend worker must add routes in App.tsx AND nav
+items in Layout.tsx. Do NOT create separate tasks for wiring.
+```
+*Why it worked:* Workers consistently created files but forgot to wire them. Explicit ownership + auto-wiring in validate eliminated this.
 
 ---
 
 ## 3. Code Analysis
 
-| Category | Files | Approximate % |
-|---|---|---|
-| **Agent-generated (via Shipyard agent)** | Ship app CRUD routes, migrations, React pages, seed data, shared types | ~40% |
-| **Claude Code-generated (via Claude Code CLI)** | Agent core (tools.py, agent.py, supervisor.py), tests, prompts, tracing | ~45% |
-| **Hand-written** | .env configuration, Docker/Railway tweaks, architectural decisions, prompt refinements | ~15% |
+| Category | Approximate % |
+|---|---|
+| **Agent-generated (via Shipyard agent)** — 24 features across 4 batch sprints: routes, migrations, pages, components, client API | ~50% |
+| **Claude Code-generated (via CLI)** — agent core, supervisor, tools, tests, prompts, reliability improvements | ~40% |
+| **Hand-written** — .env config, Docker/Railway, architectural decisions, prompt refinements, post-deploy fixes | ~10% |
 
-Out of 96 total commits: 23 are agent-generated via the Shipyard agent, 73 via Claude Code or human edits. The agent generated most of the Ship app rebuild; Claude Code generated most of the agent infrastructure.
+Out of 127 total commits: ~35 are agent-generated via the Shipyard agent, ~92 via Claude Code or human edits.
 
 ---
 
 ## 4. Strengths & Limitations
 
 **Where the tools excelled:**
-- TypeScript types generated correctly on first attempt (9/9 shared type tests passed)
-- PostgreSQL migrations with proper constraints, indexes, and CHECK clauses — no manual fixes needed
-- Full supertest suite (13 tests) generated and passing on first try
-- React frontend with 4 views, routing, and API client — generated in one agent call
-- Self-correction on tool errors: when `run_command` blocked `cd`, the agent switched to `pnpm --filter` without human help
+- 100% autonomous on greenfield CRUD features (Batch 2: 5/5 tasks, zero fixes)
+- 13 features in 70 minutes in Batch 3 (avg 321s/task)
+- FleetGraph external service integration worked perfectly with embedded type definitions
+- Consistent factory function pattern across all 36 route files
+- 8.7x performance improvement from smart verify optimization
+- Model portability: switched Claude → GPT-4o with one config change
 
 **Where the tools fell short:**
-- **Environment-specific issues:** Could not diagnose a port 5432 conflict between local PostgreSQL and Docker. Human had to identify via `lsof -i :5432` and switch Docker to port 5433.
-- **Architecture decisions:** Agent followed the PRD's discriminator table pattern literally. Human decided to refactor to separate tables — the agent wouldn't question a spec.
-- **Multi-agent hallucination:** Supervisor invented a "Ships" CRUD feature when asked to fix 5 specific bugs. The word "Ship" in the app name triggered creative task generation instead of bug parsing.
-- **Docker optimization:** Agent added unnecessary nginx layer; human simplified to Express serving static files directly.
+- **Editing existing files:** 50% autonomous (vs 100% on new files). Anchor-based replacement clips surrounding JSX context.
+- **Auth pattern copying:** 5 routes copied custom auth instead of shared `createAuthMiddleware`. Compiled fine, returned 401 at runtime.
+- **Missing files:** Agent created routes but forgot corresponding migration (api_tokens) and test files (5 routes).
+- **Package version hallucination:** Added `happy-dom@^13.10.2` (doesn't exist), broke Docker build.
+- **Runtime vs compile:** tsc passes but endpoints fail at runtime. The gap between "compiles" and "works in production" is the biggest remaining weakness.
 
 ---
 
 ## 5. Key Learnings
 
-1. **Single-agent outperforms multi-agent for precise tasks.** Single-agent mode was 100% accurate on every bug fix. Multi-agent mode fixed 3/5 bugs correctly while simultaneously hallucinating a feature. Use multi-agent for genuinely decomposable work (build a feature), not repair work (fix these specific bugs).
+1. **Systematic improvement beats ad-hoc fixes.** Analyzing failure data → implementing targeted fixes → measuring results took autonomous rate from 0% to 100% in two sprints. Each improvement addressed a specific failure mode with evidence.
 
-2. **"Read before edit" is the most important rule.** Without it, the LLM guesses file contents and produces anchors that don't match. This single rule eliminated the most common class of failures.
+2. **Shared contracts are the highest-leverage improvement.** One cheap LLM call ($0.004) generating a TypeScript interface prevented 10 of 19 interventions. The agent is a pattern replicator — give it the pattern.
 
-3. **Plan validation gates are cheap insurance.** One extra LLM call (~$0.01) to verify a task plan against the original instruction prevents expensive hallucinated work. The multi-agent hallucination created 10 wrong files that took manual cleanup — the validation gate would have caught it.
+3. **Auto-wiring eliminates human busywork.** The validate node scanning for unwired routes/pages removed the most tedious manual fix. Deterministic post-processing > hoping the LLM remembers.
 
-4. **Specific prompts > general prompts.** "Fix the column names in teams.ts" succeeded 100% of the time. "Fix bugs in the Ship app" triggered hallucination. The more precise the instruction, the better the output.
+4. **Smart verify is critical for speed.** Skipping tsc+vitest for new-file-only tasks reduced average time from 2,780s to 321s (8.7x). Full suite verification after every worker is wasteful.
 
-5. **The agent is a force multiplier, not a replacement.** It excels at boilerplate (CRUD routes, types, tests, migrations) and struggles with judgment calls (architecture, security, environment debugging). The optimal workflow is: human makes decisions, agent executes them.
+5. **"Compiles" ≠ "works."** The biggest remaining gap. Five routes passed tsc but returned 401 because they used custom auth instead of the shared middleware. Runtime verification (curl the endpoints) is the next frontier.
+
+6. **Embedding external type definitions works as well as shared contracts.** FleetGraph integration tasks were 100% autonomous because we put exact `FleetResult`, `Finding`, `ApprovalRecord` types directly in the prompts.
 
 ---
 
-## 6. Rebuild Session Log (March 25–27)
+## 6. Rebuild Session Log
 
-Chronological log of the Ship app rebuild using the Shipyard agent. Each entry records what was attempted, what happened, and any human intervention required.
+### Original Build (Mar 25–27)
+21 actions, 11 interventions (52% autonomous). See CODEAGENT.md for full log.
 
-| Time | Action | Mode | Result | Intervention? |
-|------|--------|------|--------|---------------|
-| Mar 25 13:04 | Scaffold pnpm monorepo | Claude Code | ✅ ship/api, ship/web, ship/shared | No |
-| Mar 25 14:09 | Generate shared types + DB layer | Agent (single) | ✅ Types, pool, migrations | No |
-| Mar 25 14:16 | Generate CRUD routes for /api/documents | Agent (single) | ✅ All endpoints working | No |
-| Mar 25 14:19 | Generate React CRUD UI (4 views) | Agent (single) | ✅ Docs, Issues, Projects, Teams pages | No |
-| Mar 25 14:50 | Run tests | Human | ❌ Empty test suite fails | Yes — added `--passWithNoTests` |
-| Mar 25 15:28 | Docker build for Railway | Agent + Human | ❌ Multi-stage Dockerfile broken | Yes — simplified to single-stage |
-| Mar 25 16:16 | Refactor to separate tables per entity | Agent (single) | ✅ Migration + routes generated | No |
-| Mar 25 16:57 | Seed database | Human | ❌ Column name mismatch (name vs title) | Yes — fixed seed.ts manually |
-| Mar 25 17:28 | SPA fallback breaking API routes | Human | ❌ /api/* returning HTML | Yes — added path exclusion |
-| Mar 25 19:10 | Railway healthcheck failing | Agent (single) | ✅ Agent added /health endpoint | No |
-| Mar 26 07:00 | Fix 6 Ship app bugs | Agent (multi) | ⚠️ Fixed 5/6 but hallucinated extra features | Yes — added grounding rules |
-| Mar 26 09:53 | 5 features in parallel (Swagger, WCAG, Ships, TipTap, WebSocket) | Agent (multi) | ✅ All 5 completed in 32 min | No |
-| Mar 26 12:02 | 5 TDD features in parallel | Agent (multi) | ❌ All 5 crashed — supervisor IndexError | Yes — bounds check fix |
-| Mar 26 12:19 | Re-run: Dashboard + unified docs | Agent (multi) | ✅ Dashboard page + API + tests | No |
-| Mar 26 12:33 | Re-run: Auth, programs, comments, search | Agent (multi) | ✅ All 4 features with tests | No |
-| Mar 26 12:45 | Run migrations | Human | ❌ Non-idempotent CREATE TABLE | Yes — added _migrations tracking |
-| Mar 26 12:48 | Issue filter dropdowns broken | Human | ❌ in-progress vs in_progress mismatch | Yes — fixed frontend values |
-| Mar 26 13:41 | Login page not working | Human | ❌ Backend expected username, frontend sent email | Yes — aligned field names |
-| Mar 26 19:01 | Railway deploy — server not responding | Human | ❌ Server binding to localhost not 0.0.0.0 | Yes — bound to 0.0.0.0 |
-| Mar 26 21:20 | Railway deploy — /health returning HTML | Human | ❌ Stale deploy (Mar 25 image) | Yes — set root directory to ship/ |
-| Mar 27 01:25 | Migrate + seed Railway Postgres | Human | ✅ All tables created, data seeded | No |
+### Reliability Sprint + Feature Batches (Mar 28–29)
 
-**Total: 21 actions, 11 required human intervention (52% autonomous success rate)**
+| Sprint | Tasks | Features | Autonomous | Avg Time/Task | Key Improvement |
+|--------|-------|----------|-----------|---------------|----------------|
+| Kanban (baseline) | 7 | Kanban, standups | 0/7 (0%) | — | — |
+| Batch 1 | 6 | Activity, attachments, sprint reviews, settings, notifications, org chart | 1/6 (17%) | 2,780s | Shared contract + context |
+| Batch 2 | 5 | MyWeek, status overview, profile, invitations, associations | 5/5 (100%) | 2,780s | Path fix + auto-wiring |
+| Batch 3 | 13 | FleetGraph, admin, rate limiting, audit, backlinks, API tokens, setup, iterations, team people, WebSocket, API compat | 11/13 (85%) | 321s | Smart verify + FleetGraph types |
+| Tests | 5 | Test files for 5 routes | 5/5 (100%) | — | — |
+
+### Post-Deploy Fixes (8 additional interventions)
+Wrong auth middleware (5 routes), missing api_tokens migration, lockfile desync (hallucinated version), wrong SQL column names.
 
 ---
 
@@ -134,14 +127,17 @@ Chronological log of the Ship app rebuild using the Shipyard agent. Each entry r
 
 | Metric | Value |
 |--------|-------|
-| Total development time | ~5 days (Mar 23–28) |
-| Commits | 96 |
-| Agent-generated commits | 23 |
-| Ship app source lines | 27,890 |
-| Ship app test files | 114 |
-| Agent test count | 184 (12 test files, all passing) |
-| Live eval tasks | 7 (71% passing) |
-| LangSmith traces | 214+ |
-| Human interventions | 19 |
-| Estimated API cost | ~$5.10 (blended Sonnet + GPT-4o-mini) |
+| Total development time | 6 days (Mar 23–29) |
+| Commits | 127 |
+| Agent-generated features | 24 (across 4 batch sprints) |
+| Ship API routes | 36 |
+| Ship frontend pages | 30 |
+| Ship components | 24 |
+| Database migrations | 38 |
+| Agent tests | 211 (14 files) |
+| Ship test files | 27 |
+| LangSmith traces | 243+ |
+| Autonomous rate | 0% → 17% → 100% → 85% |
+| Human interventions | 27 total (19 original + 8 post-deploy) |
+| API cost | ~$15 (blended across all models) |
 | Deployed URL | https://ship-app-production-fd9d.up.railway.app |
