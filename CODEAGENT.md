@@ -493,96 +493,30 @@ After implementing 6 agent improvements (shared contract, smarter gather_context
 
 ## Comparative Analysis (Final Submission)
 
-### Executive Summary
+Full 7-section comparative analysis is in [comparative_analysis.md](comparative_analysis.md) (607 lines). Key highlights:
 
-Shipyard rebuilt the Ship application — a project management platform — over a 6-day sprint (Mar 23-29). The agent produced a functional monorepo with 36 API routes, 30 frontend pages, FleetGraph integration, rate limiting, audit logging, and comprehensive project management features. The rebuild covers ~75% of the original's route count (36/48) and exceeds its page count (30 vs 24). The agent built 24 features autonomously across 4 batch sprints, achieving 100% autonomous rate on greenfield CRUD and 85% on mixed tasks including editing existing files and external service integration.
-
-### Architectural Comparison
-
-| Aspect | Original Ship | Agent-Built Ship |
-|--------|--------------|-----------------|
-| Database | Single `documents` table with discriminator + JSONB properties | Separate tables per entity + unified `documents` table (both coexist) |
-| Migrations | 50+ with up/down support | 38, forward-only, no rollback |
-| API routes | 48 route files, factory pattern with DI | 36 route files, same factory pattern |
-| Auth | CAIA-Auth (government SSO) + API tokens | Session tokens + API token management + rate limiting |
-| Frontend pages | 24 pages with workspace-scoped routing | 30 pages with flat routing |
-| State management | React Context + custom hooks per feature | React Context for auth + FleetGraph; local state elsewhere |
-| Editor | TipTap + Yjs collaboration + WebSocket cursor sync | TipTap + WebSocket indicators |
-| Middleware | Auth, rate limiting, audit logging, CORS | Auth + rate limiting + audit logging |
-| FleetGraph | Embedded project intelligence agent | Chat panel + approvals page integrated |
-
-### Performance Benchmarks
-
-| Metric | Original | Agent-Built | Coverage |
-|--------|----------|-------------|----------|
-| API route files | 48 | 36 | **75%** |
-| Frontend pages | 24 | 30 | **125%** (exceeds original) |
-| Frontend components | ~40 | 24 | 60% |
-| Database migrations | 50+ | 38 | 76% |
-| Test files | 115 | 27 | 23% |
-| Agent-generated features | — | 24 | — |
-
-### Shortcomings
-
-27 total human interventions across all sprints. Top failure modes: cross-boundary mismatches (5), wrong auth pattern (5), schema/contract blindness (5), infrastructure blindness (4), accumulated state (3), hallucination (2), missing files (2), lockfile desync (1). Full intervention logs in Ship Rebuild Log and comparative_analysis.md.
-
-### Advances
-
-1. **Parallel scaffolding:** 5 CRUD modules built simultaneously in 30 minutes
-2. **Autonomous rate improvement:** 0% → 100% in two improvement sprints through systematic failure analysis
-3. **8.7x performance improvement:** Smart verify reduced average task time from 2,780s to 321s
-4. **24 features in 4 batches:** Activity, Attachments, Sprint Reviews, Settings, Notifications, Org Chart, MyWeek, Status Overview, Profile, Invitations, Associations, FleetGraph Panel, Approvals, Admin, Rate Limiting, Audit Logging, Backlinks, API Tokens, Setup Wizard, Iterations, Team People, WebSocket wiring, API compat
-5. **FleetGraph integration:** External service integration worked perfectly when given exact type definitions in prompts
-6. **Consistent boilerplate:** Every route file follows identical factory function pattern
-7. **Model portability:** Switched Claude → GPT-4o with one config change; all tools worked identically
-
-### Trade-off Analysis
-
-See Architecture Decisions section above for detailed analysis of all 8 major decisions (anchor editing, LangGraph, supervisor-worker, model routing, pre-scan context, shared contract, smart verify, auto-wiring).
-
-### If You Built It Again
-
-1. **Runtime verification** — start the app and curl endpoints after each task, not just tsc compilation
-2. **Test enforcement** — fail tasks that don't produce a corresponding test file
-3. **Auth pattern linting** — grep for raw `fetch('/api/` in frontend; all must use `authFetch`
-4. **Migration-route consistency** — every route that queries a table must have a corresponding migration
-5. **Package version validation** — `pnpm view <pkg> version` before adding to package.json (partially implemented)
-6. **Lockfile sync** — run `pnpm install --frozen-lockfile` after any package.json change (implemented)
+- **Route coverage:** 36/48 (75%) — exceeds original on frontend pages (30 vs 24)
+- **Autonomous rate progression:** 0% → 17% → 100% → 85% across 4 sprints
+- **27 total interventions** across all sprints — see detailed logs in comparative_analysis.md
+- **8.7x performance improvement** from smart verify (2,780s → 321s avg per task)
+- **24 features built autonomously** including FleetGraph integration, rate limiting, audit logging
+- **Key finding:** "compiles" ≠ "works in production" — runtime verification is the next frontier
 
 ---
 
 ## Cost Analysis (Final Submission)
 
-### Development Costs (Actual)
+Full cost breakdown is in [AI_COST_ANALYSIS.md](AI_COST_ANALYSIS.md). Summary:
 
-| Model | Role | Usage | Est. Cost |
-|-------|------|-------|-----------|
-| Claude Sonnet 4.5 | Backend/frontend workers, single-agent | ~40% of 243 runs | ~$3.50 |
-| GPT-4o-mini | Supervisor, shared/DB workers | ~20% of runs | ~$0.10 |
-| GPT-4o / GPT-5 | All workers (batches 2-3) | ~40% of runs | ~$8.00 |
-| **Total API cost** | | **243+ runs** | **~$12-15** |
+| Metric | Value |
+|--------|-------|
+| Total API cost | ~$15 (243+ traced runs) |
+| Infrastructure cost | $0 (Railway + LangSmith free tiers) |
+| Cost per feature | ~$0.63 |
+| Agent vs Junior Dev | ~260x cheaper ($15 vs $4,000) |
+| Agent vs Senior Dev | ~130x cheaper ($15 vs $2,000) |
+| Production (100 users) | ~$900/month |
+| Production (1,000 users) | ~$9,000/month |
+| Production (10,000 users) | ~$90,000/month |
 
-Infrastructure: $0 (Railway free tier, LangSmith free tier, GitHub free).
-
-**Total development cost: ~$15**
-
-### Production Cost Projections
-
-Assumptions: 10 invocations/user/day, 4K input + 2K output tokens per invocation, 70/30 Sonnet/GPT-4o-mini split.
-
-| Scale | Users | Daily Invocations | Monthly Cost |
-|-------|-------|-------------------|-------------|
-| 100 users | 100 | 1,000 | ~$900/month |
-| 1,000 users | 1,000 | 10,000 | ~$9,000/month |
-| 10,000 users | 10,000 | 100,000 | ~$90,000/month |
-
-### Break-Even vs. Manual Development
-
-| Metric | Agent | Junior Dev | Senior Dev |
-|--------|-------|-----------|-----------|
-| Time to rebuild | ~10 hours active (6 days wall clock) | ~80 hours | ~40 hours |
-| Features built | 24 autonomous + FleetGraph integration | ~24 | ~24 |
-| Cost | ~$15 | $4,000 (@$50/hr) | $2,000 (@$50/hr) |
-| Human interventions | 27 | 0 | 0 |
-
-The agent is ~130-260x cheaper than manual development but required 27 human interventions for: wrong auth patterns, missing migrations, lockfile desync, deployment config, and seed data. The code generation quality is high; the gap is in runtime verification and cross-file consistency.
+The agent required 27 human interventions. The code generation quality is high; the gap is in runtime verification and cross-file consistency.

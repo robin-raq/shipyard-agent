@@ -5,6 +5,8 @@ __pycache__/
 dist/
 build/
 *.egg
+.pytest_cache/
+.mypy_cache/
 
 # Virtual environments
 .venv/
@@ -20,31 +22,26 @@ env/
 *.swp
 *.swo
 
+# TypeScript build outputs
+**/*.tsbuildinfo
+
 # Traces (local JSON, not committed)
 traces/*.json
 
 # Backups from edit_file tool
 *.bak
-*.bak2
-*.bak3
-*.skip
 
 # Firebase
 firebase-debug.log
 
-# Node (root level — ship/ has its own)
+# Node
 node_modules/
+.pnpm-store/
 
 # OS
 .DS_Store
 
-# Study guide (personal reference)
+# Personal reference docs (not project docs)
 STUDY_GUIDE.md
-
-# Demo script (personal reference)
 DEMO_SCRIPT.md
-
-# Interview prep (personal reference)
 AI_INTERVIEW_PREP.md
-.pnpm-store/
-/api/

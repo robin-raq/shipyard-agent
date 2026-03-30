@@ -1,8 +1,0 @@
-{
-  "trace_id": "trace_20260329_012800",
-  "timestamp": "2026-03-29T01:28:00.352594+00:00",
-  "instruction": "new_feature_task_6_Org Chart \u2014 migration, API, tree visualization",
-  "steps": [],
-  "total_duration_ms": 648718,
-  "result": "success"
-}
