@@ -7,7 +7,7 @@ import { createAuthMiddleware } from "../middleware/auth.js";
 export interface TeamPeopleResponse {
   people: Array<{
     id: string;
-    user_id: string;
+    userId: string;
     name: string;
     email: string;
     role: string;
@@ -31,7 +31,7 @@ export function createTeamPeopleRouter(pool: pg.Pool): Router {
 
       const people: TeamPeopleResponse["people"] = rows.map((r: any) => ({
         id: r.id as string,
-        user_id: r.id as string,
+        userId: r.id as string,
         name: r.username as string,
         email: r.email as string,
         role: r.role as string,

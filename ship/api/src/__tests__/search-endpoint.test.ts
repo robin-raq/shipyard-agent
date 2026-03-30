@@ -58,7 +58,7 @@ describe("GET /api/search - Unified Search Endpoint", () => {
       );
       await pool.query(
         `INSERT INTO issues (title, content, status, priority) VALUES ($1, $2, $3, $4)`,
-        ["MixedCase Issue", "Content with SEARCHABLE keyword", "open", "medium"]
+        ["MixedCase Issue", "Content with SEARCHABLE keyword", "triage", "medium"]
       );
       await pool.query(
         `INSERT INTO projects (title, description, status) VALUES ($1, $2, $3)`,
@@ -105,7 +105,7 @@ describe("GET /api/search - Unified Search Endpoint", () => {
       );
       await pool.query(
         `INSERT INTO issues (title, content, status, priority) VALUES ($1, $2, $3, $4)`,
-        ["Test Issue", "Issue with keyword", "open", "medium"]
+        ["Test Issue", "Issue with keyword", "triage", "medium"]
       );
       await pool.query(
         `INSERT INTO projects (title, description, status) VALUES ($1, $2, $3)`,
@@ -178,7 +178,7 @@ describe("GET /api/search - Unified Search Endpoint", () => {
     it("should find issues by title", async () => {
       await pool.query(
         `INSERT INTO issues (title, content, status, priority) VALUES ($1, $2, $3, $4)`,
-        ["Unique Issue Title", "Regular content", "open", "medium"]
+        ["Unique Issue Title", "Regular content", "triage", "medium"]
       );
 
       const res = await request(app).get("/api/search?q=unique&type=issue");
@@ -220,7 +220,7 @@ describe("GET /api/search - Unified Search Endpoint", () => {
     it("should exclude soft-deleted issues from search", async () => {
       const result = await pool.query(
         `INSERT INTO issues (title, content, status, priority) VALUES ($1, $2, $3, $4) RETURNING id`,
-        ["Deleted Issue", "Content with keyword", "open", "medium"]
+        ["Deleted Issue", "Content with keyword", "triage", "medium"]
       );
       const issueId = result.rows[0].id;
 

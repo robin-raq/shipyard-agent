@@ -62,11 +62,10 @@ export function createInvitationsRouter(pool: pg.Pool): Router {
     };
   }
 
-  async function ensureNotExpired(invite: InvitationDB, client?: pg.PoolClient): Promise<InvitationDB> {
+  async function ensureNotExpired(invite: InvitationDB): Promise<InvitationDB> {
     if (invite.status === "pending" && new Date(invite.expires_at) < new Date()) {
-      // Mark as expired (use provided client when in a transaction)
-      const q = client ?? pool;
-      await q.query(
+      // Mark as expired
+      await pool.query(
         "UPDATE invitations SET status = 'expired' WHERE id = $1",
         [invite.id]
       );
@@ -187,7 +186,7 @@ export function createInvitationsRouter(pool: pg.Pool): Router {
           return res.status(404).json({ error: true, message: "Invitation not found", status: 404 });
         }
 
-        let invite = await ensureNotExpired(invRes.rows[0], client);
+        let invite = await ensureNotExpired(invRes.rows[0]);
         if (invite.status !== "pending") {
           await client.query("ROLLBACK");
           const statusCode = invite.status === "expired" ? 410 : 409;

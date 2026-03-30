@@ -339,6 +339,20 @@ export function createSprintReviewsRouter(pool: pg.Pool): express.Router {
         return res.status(400).json({ error: 'Invalid review id' });
       }
 
+      // Fetch current status
+      const existing = await pool.query(
+        `SELECT ${DB_COLUMNS.status} FROM sprint_reviews WHERE ${DB_COLUMNS.id} = $1 AND ${DB_COLUMNS.deletedAt} IS NULL`,
+        [id]
+      );
+
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ error: 'Sprint review not found' });
+      }
+
+      if (existing.rows[0][DB_COLUMNS.status] === STATUS_SUBMITTED) {
+        return res.status(400).json({ error: 'Review already submitted' });
+      }
+
       const { rows } = await pool.query(
         `UPDATE sprint_reviews
          SET ${DB_COLUMNS.status} = $2, ${DB_COLUMNS.submittedAt} = COALESCE(${DB_COLUMNS.submittedAt}, NOW()), ${DB_COLUMNS.updatedAt} = NOW()

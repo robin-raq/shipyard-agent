@@ -57,30 +57,6 @@ export function createWeeksRouter(pool: pg.Pool): Router {
     }
   });
 
-  // GET /:id/standups - list standups for a given week
-  router.get("/:id/standups", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const id = req.params.id as string;
-
-      const query = `
-        SELECT 
-          s.*, 
-          u.username AS user_name
-        FROM standups s
-        JOIN users u ON s.user_id = u.id
-        JOIN weeks w ON w.id = $1
-        WHERE s.deleted_at IS NULL
-          AND s.standup_date BETWEEN w.start_date AND w.end_date
-        ORDER BY s.standup_date DESC
-      `;
-
-      const result = await pool.query(query, [id]);
-      return res.status(200).json(result.rows);
-    } catch (err) {
-      next(err);
-    }
-  });
-
   // POST / - create new week
   router.post("/", async (req: Request, res: Response, next: NextFunction) => {
     try {

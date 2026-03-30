@@ -4,11 +4,19 @@ import pg from "pg";
 export function createDocsRouter(pool: pg.Pool): Router {
   const router = Router();
 
-  // GET / - list all docs
+  // GET / - list all docs (optional ?search=term filters title)
   router.get("/", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const query = "SELECT * FROM docs WHERE deleted_at IS NULL ORDER BY created_at DESC";
-      const result = await pool.query(query);
+      const raw = req.query.search;
+      const search = typeof raw === "string" ? raw.trim() : "";
+      let sql = "SELECT * FROM docs WHERE deleted_at IS NULL";
+      const params: string[] = [];
+      if (search) {
+        sql += " AND title ILIKE $1";
+        params.push(`%${search}%`);
+      }
+      sql += " ORDER BY created_at DESC";
+      const result = await pool.query(sql, params);
       res.status(200).json(result.rows);
     } catch (err) {
       next(err);
@@ -52,11 +60,21 @@ export function createDocsRouter(pool: pg.Pool): Router {
         });
       }
 
+      const contentStr =
+        content === undefined || content === null ? "" : String(content);
+      if (contentStr.trim() === "") {
+        return res.status(400).json({
+          error: true,
+          message: "Content is required",
+          status: 400,
+        });
+      }
+
       const result = await pool.query(
         `INSERT INTO docs (title, content)
          VALUES ($1, $2)
          RETURNING *`,
-        [title, content || ""]
+        [title, contentStr]
       );
 
       res.status(201).json(result.rows[0]);

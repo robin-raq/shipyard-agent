@@ -49,7 +49,7 @@ async function seedIssue(overrides: Record<string, any> = {}) {
   const defaults = {
     title: "Test Issue",
     content: "This is test issue content",
-    status: "open",
+    status: "triage",
     priority: "medium",
   };
   const issue = { ...defaults, ...overrides };
@@ -430,20 +430,20 @@ describe("Full-Text Search - Cross-Entity Search Patterns", () => {
       await seedIssue({
         title: "Bug report",
         content: "Details",
-        status: "open",
+        status: "triage",
       });
       await seedIssue({
         title: "Bug report",
         content: "Details",
-        status: "closed",
+        status: "cancelled",
       });
 
       const issues = await pool.query(
         "SELECT * FROM issues WHERE title ILIKE $1 AND status = $2 AND deleted_at IS NULL",
-        ["%bug%", "open"]
+        ["%bug%", "triage"]
       );
       expect(issues.rows).toHaveLength(1);
-      expect(issues.rows[0].status).toBe("open");
+      expect(issues.rows[0].status).toBe("triage");
     });
 
     it("should support filtering by priority in search", async () => {

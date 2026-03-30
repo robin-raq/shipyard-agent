@@ -1,4 +1,4 @@
-import type * as Express from "express";
+import type Express from "express";
 import type { Request, Response, NextFunction } from "express";
 
 // === SHARED CONTRACT (ALL WORKERS MUST MATCH EXACTLY) ===

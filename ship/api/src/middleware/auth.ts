@@ -85,12 +85,7 @@ export function createAuthMiddleware(pool: pg.Pool) {
       req.sessionId = session.session_id;
 
       next();
-    } catch (error: any) {
-      // If the sessions table doesn't exist (e.g., in isolated route tests), skip auth
-      if (error && (error as any).code === "42P01") {
-        console.warn("Sessions table not found; skipping auth for this request");
-        return next();
-      }
+    } catch (error) {
       console.error("Authentication error:", error);
       return res.status(500).json({
         error: true,

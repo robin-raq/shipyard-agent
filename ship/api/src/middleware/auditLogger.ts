@@ -1,4 +1,4 @@
-import type * as Express from "express";
+import Express from "express";
 import pg from "pg";
 
 // === SHARED CONTRACT (ALL WORKERS MUST MATCH EXACTLY) ===
@@ -150,7 +150,7 @@ export function createAuditLogger(pool: pg.Pool): Express.RequestHandler {
     res.on("finish", async () => {
       try {
         const action = method;
-        const userId = (req as any).user?.id ?? null;
+        const userId = req.user?.id ?? null;
         const resourceType = deriveResourceType(req);
         const resourceId = deriveResourceId(req, sanitizedBody);
         const ipAddress = getClientIp(req).slice(0, 45);

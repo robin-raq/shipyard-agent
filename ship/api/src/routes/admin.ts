@@ -27,8 +27,8 @@ interface User {
   username: string;
   email: string;
   role: string;
-  title: string;
-  department: string;
+  title: string | null;
+  department: string | null;
   createdAt: string;
   deletedAt: string | null;
   updatedAt: string | null;
@@ -86,8 +86,8 @@ export function createAdminRouter(pool: pg.Pool): Router {
       username: row.username,
       email: row.email,
       role: row.role,
-      title: row.title ?? "",
-      department: row.department ?? "",
+      title: row.title ?? null,
+      department: row.department ?? null,
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
       updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
       deletedAt: row.deleted_at ? new Date(row.deleted_at).toISOString() : null,

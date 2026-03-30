@@ -25,7 +25,9 @@ export function createDashboardRouter(pool: pg.Pool): Router {
         FROM issues i
         LEFT JOIN projects p ON i.project_id = p.id
         WHERE i.deleted_at IS NULL
-          AND i.status IN ('open', 'in_progress')
+          AND i.status IN (
+            'triage', 'backlog', 'todo', 'in_progress', 'in_review'
+          )
         ORDER BY 
           CASE i.priority
             WHEN 'critical' THEN 1
@@ -143,7 +145,9 @@ export function createDashboardRouter(pool: pg.Pool): Router {
           FROM issues i
           LEFT JOIN projects p ON i.project_id = p.id
           WHERE i.deleted_at IS NULL
-            AND i.status IN ('open', 'in_progress')
+            AND i.status IN (
+              'triage', 'backlog', 'todo', 'in_progress', 'in_review'
+            )
           ORDER BY 
             CASE i.priority
               WHEN 'critical' THEN 1

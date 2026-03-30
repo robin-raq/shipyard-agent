@@ -54,9 +54,37 @@ export function createSetupRouter(pool: pg.Pool): express.Router {
       // Ensure column exist usage according to contract
       const sql = `SELECT ${SETUP_COMPLETED_COLUMN} FROM ${USER_SETTINGS_TABLE} WHERE user_id = $1 LIMIT 1`;
       const { rows } = await pool.query(sql, [userId]);
-      const completed = mapCompleted(rows[0]);
+      const completedFlag = mapCompleted(rows[0]);
 
-      const steps = SETUP_STEPS.map(s => ({ name: s.name, label: s.label, done: completed }));
+      // Reflect actual data state for each step
+      let teamExists = false;
+      let projectExists = false;
+      let standupExists = false;
+      try {
+        teamExists = (await pool.query(
+          `SELECT 1 FROM teams WHERE deleted_at IS NULL LIMIT 1`
+        )).rows.length > 0;
+      } catch {}
+      try {
+        projectExists = (await pool.query(
+          `SELECT 1 FROM projects WHERE deleted_at IS NULL LIMIT 1`
+        )).rows.length > 0;
+      } catch {}
+      try {
+        standupExists = (await pool.query(
+          `SELECT 1 FROM standups WHERE user_id = $1 LIMIT 1`,
+          [userId]
+        )).rows.length > 0;
+      } catch {}
+
+      const completed = completedFlag || (teamExists && projectExists && standupExists);
+
+      const steps = [
+        { name: 'create_team', label: 'Create a Team', done: completed || teamExists },
+        { name: 'create_project', label: 'Create a Project', done: completed || projectExists },
+        { name: 'first_standup', label: 'Submit First Standup', done: completed || standupExists },
+      ];
+
       const response = { completed, steps } as { completed: boolean, steps: { name: string, label: string, done: boolean }[] };
       return res.json(response);
     } catch (err) {

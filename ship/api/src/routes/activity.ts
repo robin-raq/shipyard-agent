@@ -16,7 +16,7 @@ interface ActivityLog {
   entityType: EntityType;
   entityId: string;
   entityTitle: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, any> | null;
   createdAt: string;
 }
 
@@ -28,7 +28,7 @@ function rowToActivity(row: any): ActivityLog {
     entityType: row.entity_type,
     entityId: row.entity_id,
     entityTitle: row.entity_title,
-    metadata: row.metadata || {},
+    metadata: row.metadata ?? null,
     createdAt: row.created_at,
   };
 }
@@ -155,13 +155,15 @@ export function createActivityRouter(pool: pg.Pool): Router {
         return res.status(400).json({ error: true, message: "entityTitle is required", status: 400 });
       }
 
-      await pool.query(
+      const insertResult = await pool.query(
         `INSERT INTO activity_log (user_id, action, entity_type, entity_id, entity_title, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, user_id, action, entity_type, entity_id, entity_title, metadata, created_at`,
         [req.user!.id, action, entityType, entityId, entityTitle, metadata]
       );
 
-      res.status(201).json({ success: true });
+      const activity = rowToActivity(insertResult.rows[0]);
+      res.status(201).json(activity);
     } catch (err) {
       next(err);
     }
