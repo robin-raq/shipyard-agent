@@ -260,74 +260,97 @@ def _read_exemplar(path: "Path", max_lines: int = MAX_EXEMPLAR_LINES) -> str:
     return "\n".join(content.splitlines()[:max_lines])
 
 
+EXEMPLAR_SOURCES = [
+    {
+        "keywords": ["route", "router", "endpoint", "api"],
+        "label": "Route",
+        "path": "ship/api/src/routes",
+        "glob": "*.ts",
+        "lang": "typescript",
+        "inventory_label": "Existing Routes",
+        "inventory_stem": True,
+    },
+    {
+        "keywords": ["migration", "table", "schema", "database"],
+        "label": "Migration",
+        "path": "ship/api/src/db/migrations",
+        "glob": "*.sql",
+        "lang": "sql",
+        "inventory_label": "Existing Migrations",
+        "inventory_stem": False,
+        "use_latest": True,
+    },
+    {
+        "keywords": ["component", "form", "banner", "card"],
+        "label": "Component",
+        "path": "ship/web/src/components",
+        "glob": "*.tsx",
+        "lang": "tsx",
+    },
+    {
+        "keywords": ["page", "view"],
+        "label": "Page",
+        "path": "ship/web/src/pages",
+        "glob": "*.tsx",
+        "lang": "tsx",
+    },
+]
+
+ROLE_PATTERN_KEYWORDS = {
+    "backend": ["route", "migration", "existing routes", "existing migrations"],
+    "frontend": ["component", "page", "api client"],
+    "database": ["migration", "existing migrations"],
+    "shared": None,  # gets all sections
+}
+
+
+def _collect_exemplars(workspace_root, all_descriptions: str) -> list[str]:
+    """Collect exemplar files and inventories for each code type."""
+    parts = []
+    for source in EXEMPLAR_SOURCES:
+        if not any(kw in all_descriptions for kw in source["keywords"]):
+            continue
+        source_dir = workspace_root / source["path"]
+        if not source_dir.exists():
+            continue
+
+        if source.get("use_latest"):
+            files = sorted(source_dir.glob(source["glob"]))
+            exemplar = files[-1] if files else None
+        else:
+            exemplar = _find_best_exemplar(source_dir, source["glob"], all_descriptions)
+
+        if exemplar:
+            preview = _read_exemplar(exemplar)
+            parts.append(
+                f"### {source['label']} Pattern (from {exemplar.name})\n"
+                f"```{source['lang']}\n{preview}\n```"
+            )
+
+        if source.get("inventory_label"):
+            files = sorted(source_dir.glob(source["glob"]))
+            names = [f.stem if source.get("inventory_stem") else f.name for f in files]
+            if names:
+                parts.append(f"### {source['inventory_label']}: {', '.join(names)}")
+
+    return parts
+
+
 def gather_context(state: SupervisorState) -> dict:
     """Read exemplar files from workspace to inject codebase patterns into worker context.
 
-    Scans task descriptions for keywords (route, migration, component, page)
-    and reads the most relevant exemplar file of each type. Also builds an
-    inventory of existing routes, migrations, and pages. No LLM call.
+    Scans task descriptions for keywords and reads the most relevant exemplar
+    of each type. Also builds an inventory of existing files. No LLM call.
     """
     from shipyard.tools import _workspace_root
 
     if _workspace_root is None:
-        return {"codebase_patterns": ""}
+        return {"codebase_patterns": "", "project_state": ""}
 
     tasks = state.get("tasks", [])
     all_descriptions = " ".join(t.get("description", "") for t in tasks).lower()
 
-    patterns_parts = []
-
-    # Route exemplar + inventory
-    if any(kw in all_descriptions for kw in ["route", "router", "endpoint", "api"]):
-        route_dir = _workspace_root / "ship" / "api" / "src" / "routes"
-        if route_dir.exists():
-            exemplar = _find_best_exemplar(route_dir, "*.ts", all_descriptions)
-            if exemplar:
-                preview = _read_exemplar(exemplar)
-                patterns_parts.append(
-                    f"### Route Pattern (from {exemplar.name})\n```typescript\n{preview}\n```"
-                )
-            # Inventory of existing routes
-            existing = [f.stem for f in sorted(route_dir.glob("*.ts"))]
-            if existing:
-                patterns_parts.append(f"### Existing Routes: {', '.join(existing)}")
-
-    # Migration exemplar + inventory
-    if any(kw in all_descriptions for kw in ["migration", "table", "schema", "database"]):
-        mig_dir = _workspace_root / "ship" / "api" / "src" / "db" / "migrations"
-        if mig_dir.exists():
-            sql_files = sorted(mig_dir.glob("*.sql"))
-            if sql_files:
-                exemplar = sql_files[-1]  # Latest migration
-                content = exemplar.read_text(errors="replace")
-                patterns_parts.append(
-                    f"### Migration Pattern (from {exemplar.name})\n```sql\n{content}\n```"
-                )
-            existing = [f.name for f in sql_files]
-            if existing:
-                patterns_parts.append(f"### Existing Migrations: {', '.join(existing)}")
-
-    # Component exemplar
-    if any(kw in all_descriptions for kw in ["component", "form", "banner", "card"]):
-        comp_dir = _workspace_root / "ship" / "web" / "src" / "components"
-        if comp_dir.exists():
-            exemplar = _find_best_exemplar(comp_dir, "*.tsx", all_descriptions)
-            if exemplar:
-                preview = _read_exemplar(exemplar)
-                patterns_parts.append(
-                    f"### Component Pattern (from {exemplar.name})\n```tsx\n{preview}\n```"
-                )
-
-    # Page exemplar
-    if any(kw in all_descriptions for kw in ["page", "view"]):
-        pages_dir = _workspace_root / "ship" / "web" / "src" / "pages"
-        if pages_dir.exists():
-            exemplar = _find_best_exemplar(pages_dir, "*.tsx", all_descriptions)
-            if exemplar:
-                preview = _read_exemplar(exemplar)
-                patterns_parts.append(
-                    f"### Page Pattern (from {exemplar.name})\n```tsx\n{preview}\n```"
-                )
+    patterns_parts = _collect_exemplars(_workspace_root, all_descriptions)
 
     # API client patterns (for frontend workers)
     if any(kw in all_descriptions for kw in ["component", "page", "frontend", "client", "form"]):
@@ -348,7 +371,6 @@ def gather_context(state: SupervisorState) -> dict:
         + "\n\n".join(patterns_parts)
     )
 
-    # Scan project state inventory
     from shipyard.project_state import format_project_state, scan_project_state
     project_state_str = format_project_state(scan_project_state(_workspace_root))
 
@@ -423,20 +445,13 @@ def execute_next_task(state: SupervisorState, worker_graphs: dict) -> dict:
     prior_context = ""
     worker_role = task["worker"]
 
-    # Inject codebase patterns (filtered by role)
+    # Inject codebase patterns (filtered by worker role)
     codebase_patterns = state.get("codebase_patterns", "")
     if codebase_patterns:
-        # Filter pattern sections to only relevant ones
+        role_keywords = ROLE_PATTERN_KEYWORDS.get(worker_role)
         filtered_sections = []
         for section in codebase_patterns.split("\n### "):
-            section_lower = section.lower()
-            if worker_role == "backend" and any(k in section_lower for k in ["route", "migration", "existing routes", "existing migrations"]):
-                filtered_sections.append(section)
-            elif worker_role == "frontend" and any(k in section_lower for k in ["component", "page", "api client"]):
-                filtered_sections.append(section)
-            elif worker_role == "database" and any(k in section_lower for k in ["migration", "existing migrations"]):
-                filtered_sections.append(section)
-            elif worker_role == "shared":
+            if role_keywords is None or any(k in section.lower() for k in role_keywords):
                 filtered_sections.append(section)
         if filtered_sections:
             prior_context += "\n## Codebase Patterns\n\n### " + "\n### ".join(filtered_sections) + "\n"

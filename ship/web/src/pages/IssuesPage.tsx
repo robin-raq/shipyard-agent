@@ -13,13 +13,16 @@ interface Issue {
   created_at: string;
 }
 
-const VALID_STATUSES = ['open', 'in_progress', 'closed', 'blocked'];
+const VALID_STATUSES = ['triage', 'backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled'];
 
 const STATUS_COLORS: Record<string, string> = {
-  open: 'bg-blue-100 text-blue-800',
+  triage: 'bg-purple-100 text-purple-800',
+  backlog: 'bg-gray-100 text-gray-800',
+  todo: 'bg-blue-100 text-blue-800',
   in_progress: 'bg-yellow-100 text-yellow-800',
-  closed: 'bg-green-100 text-green-800',
-  blocked: 'bg-red-100 text-red-800',
+  in_review: 'bg-indigo-100 text-indigo-800',
+  done: 'bg-green-100 text-green-800',
+  cancelled: 'bg-red-100 text-red-800',
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -73,7 +76,7 @@ const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
 
   const handleCreate = async (data: { title: string; content: string }) => {
     try {
-      await createIssue({ ...data, status: 'open', priority: 'medium' });
+      await createIssue({ ...data, status: 'triage', priority: 'medium' });
       setShowCreateForm(false);
       await fetchIssues();
     } catch (err) {

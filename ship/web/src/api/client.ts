@@ -1,4 +1,4 @@
-async function handleResponse(response: Response) {
+async function handleResponse<T = any>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Request failed' }));
     throw new Error(error.message || `HTTP ${response.status}: ${response.statusText}`);
@@ -10,17 +10,17 @@ import { authFetch } from '../context/AuthContext';
 
 // Docs API
 export async function getDocs() {
-  const response = await fetch('/api/docs');
+  const response = await authFetch('/api/docs');
   return handleResponse(response);
 }
 
 export async function getDoc(id: string) {
-  const response = await fetch(`/api/docs/${id}`);
+  const response = await authFetch(`/api/docs/${id}`);
   return handleResponse(response);
 }
 
 export async function createDoc(data: { title: string; content: string }) {
-  const response = await fetch('/api/docs', {
+  const response = await authFetch('/api/docs', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -31,7 +31,7 @@ export async function createDoc(data: { title: string; content: string }) {
 }
 
 export async function updateDoc(id: string, data: { title?: string; content?: string }) {
-  const response = await fetch(`/api/docs/${id}`, {
+  const response = await authFetch(`/api/docs/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -42,7 +42,7 @@ export async function updateDoc(id: string, data: { title?: string; content?: st
 }
 
 export async function deleteDoc(id: string) {
-  const response = await fetch(`/api/docs/${id}`, {
+  const response = await authFetch(`/api/docs/${id}`, {
     method: 'DELETE',
   });
   return handleResponse(response);
@@ -69,17 +69,17 @@ export async function getIssues(filters?: { status?: string; priority?: string }
     const queryString = params.toString();
     if (queryString) url += `?${queryString}`;
   }
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse(response);
 }
 
 export async function getIssue(id: string) {
-  const response = await fetch(`/api/issues/${id}`);
+  const response = await authFetch(`/api/issues/${id}`);
   return handleResponse(response);
 }
 
 export async function createIssue(data: { title: string; content: string; status?: string; priority?: string }) {
-  const response = await fetch('/api/issues', {
+  const response = await authFetch('/api/issues', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -90,7 +90,7 @@ export async function createIssue(data: { title: string; content: string; status
 }
 
 export async function updateIssue(id: string, data: { title?: string; content?: string; status?: string; priority?: string }) {
-  const response = await fetch(`/api/issues/${id}`, {
+  const response = await authFetch(`/api/issues/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -101,7 +101,7 @@ export async function updateIssue(id: string, data: { title?: string; content?: 
 }
 
 export async function deleteIssue(id: string) {
-  const response = await fetch(`/api/issues/${id}`, {
+  const response = await authFetch(`/api/issues/${id}`, {
     method: 'DELETE',
   });
   return handleResponse(response);
@@ -109,17 +109,17 @@ export async function deleteIssue(id: string) {
 
 // Projects API
 export async function getProjects() {
-  const response = await fetch('/api/projects');
+  const response = await authFetch('/api/projects');
   return handleResponse(response);
 }
 
 export async function getProject(id: string) {
-  const response = await fetch(`/api/projects/${id}`);
+  const response = await authFetch(`/api/projects/${id}`);
   return handleResponse(response);
 }
 
 export async function createProject(data: { title: string; content: string; status?: string }) {
-  const response = await fetch('/api/projects', {
+  const response = await authFetch('/api/projects', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -130,7 +130,7 @@ export async function createProject(data: { title: string; content: string; stat
 }
 
 export async function updateProject(id: string, data: { title?: string; content?: string; status?: string }) {
-  const response = await fetch(`/api/projects/${id}`, {
+  const response = await authFetch(`/api/projects/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -141,7 +141,7 @@ export async function updateProject(id: string, data: { title?: string; content?
 }
 
 export async function deleteProject(id: string) {
-  const response = await fetch(`/api/projects/${id}`, {
+  const response = await authFetch(`/api/projects/${id}`, {
     method: 'DELETE',
   });
   return handleResponse(response);
@@ -149,17 +149,17 @@ export async function deleteProject(id: string) {
 
 // Weeks API
 export async function getWeeks() {
-  const response = await fetch('/api/weeks');
+  const response = await authFetch('/api/weeks');
   return handleResponse(response);
 }
 
 export async function getWeek(id: string) {
-  const response = await fetch(`/api/weeks/${id}`);
+  const response = await authFetch(`/api/weeks/${id}`);
   return handleResponse(response);
 }
 
 export async function createWeek(data: { title: string; content: string }) {
-  const response = await fetch('/api/weeks', {
+  const response = await authFetch('/api/weeks', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -170,7 +170,7 @@ export async function createWeek(data: { title: string; content: string }) {
 }
 
 export async function updateWeek(id: string, data: { title?: string; content?: string }) {
-  const response = await fetch(`/api/weeks/${id}`, {
+  const response = await authFetch(`/api/weeks/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -181,7 +181,7 @@ export async function updateWeek(id: string, data: { title?: string; content?: s
 }
 
 export async function deleteWeek(id: string) {
-  const response = await fetch(`/api/weeks/${id}`, {
+  const response = await authFetch(`/api/weeks/${id}`, {
     method: 'DELETE',
   });
   return handleResponse(response);
@@ -189,17 +189,17 @@ export async function deleteWeek(id: string) {
 
 // Teams API
 export async function getTeams() {
-  const response = await fetch('/api/teams');
+  const response = await authFetch('/api/teams');
   return handleResponse(response);
 }
 
 export async function getTeam(id: string) {
-  const response = await fetch(`/api/teams/${id}`);
+  const response = await authFetch(`/api/teams/${id}`);
   return handleResponse(response);
 }
 
 export async function createTeam(data: { name: string; description: string }) {
-  const response = await fetch('/api/teams', {
+  const response = await authFetch('/api/teams', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -210,7 +210,7 @@ export async function createTeam(data: { name: string; description: string }) {
 }
 
 export async function updateTeam(id: string, data: { name?: string; description?: string }) {
-  const response = await fetch(`/api/teams/${id}`, {
+  const response = await authFetch(`/api/teams/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -221,7 +221,7 @@ export async function updateTeam(id: string, data: { name?: string; description?
 }
 
 export async function deleteTeam(id: string) {
-  const response = await fetch(`/api/teams/${id}`, {
+  const response = await authFetch(`/api/teams/${id}`, {
     method: 'DELETE',
   });
   return handleResponse(response);
@@ -229,17 +229,17 @@ export async function deleteTeam(id: string) {
 
 // Ships API
 export async function getShips() {
-  const response = await fetch('/api/ships');
+  const response = await authFetch('/api/ships');
   return handleResponse(response);
 }
 
 export async function getShip(id: string) {
-  const response = await fetch(`/api/ships/${id}`);
+  const response = await authFetch(`/api/ships/${id}`);
   return handleResponse(response);
 }
 
 export async function createShip(data: { name: string; description?: string; status?: string }) {
-  const response = await fetch('/api/ships', {
+  const response = await authFetch('/api/ships', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -250,7 +250,7 @@ export async function createShip(data: { name: string; description?: string; sta
 }
 
 export async function updateShip(id: string, data: { name?: string; description?: string; status?: string }) {
-  const response = await fetch(`/api/ships/${id}`, {
+  const response = await authFetch(`/api/ships/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -261,7 +261,7 @@ export async function updateShip(id: string, data: { name?: string; description?
 }
 
 export async function deleteShip(id: string) {
-  const response = await fetch(`/api/ships/${id}`, {
+  const response = await authFetch(`/api/ships/${id}`, {
     method: 'DELETE',
   });
   return handleResponse(response);
@@ -318,17 +318,17 @@ export async function getPrograms(options?: { search?: string; limit?: number; o
     const queryString = params.toString();
     if (queryString) url += `?${queryString}`;
   }
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse(response);
 }
 
 export async function getProgram(id: string) {
-  const response = await fetch(`/api/programs/${id}`);
+  const response = await authFetch(`/api/programs/${id}`);
   return handleResponse(response);
 }
 
 export async function createProgram(data: { name: string; description?: string }) {
-  const response = await fetch('/api/programs', {
+  const response = await authFetch('/api/programs', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -339,7 +339,7 @@ export async function createProgram(data: { name: string; description?: string }
 }
 
 export async function updateProgram(id: string, data: { name?: string; description?: string }) {
-  const response = await fetch(`/api/programs/${id}`, {
+  const response = await authFetch(`/api/programs/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -350,7 +350,7 @@ export async function updateProgram(id: string, data: { name?: string; descripti
 }
 
 export async function deleteProgram(id: string) {
-  const response = await fetch(`/api/programs/${id}`, {
+  const response = await authFetch(`/api/programs/${id}`, {
     method: 'DELETE',
   });
   return handleResponse(response);

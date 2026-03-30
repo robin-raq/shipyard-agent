@@ -10,6 +10,7 @@ the workspace root are rejected.
 import json
 import os
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -300,7 +301,6 @@ ALLOWED_PROGRAMS = frozenset({
 
 def _parse_command(command: str) -> list[str]:
     """Split a command string into a list of arguments using shlex."""
-    import shlex
     try:
         return shlex.split(command)
     except ValueError:
@@ -434,7 +434,7 @@ def search_files(pattern: str, glob: str = "", directory: str = "") -> str:
 _EXCLUDED_DIRS = frozenset({
     "node_modules", ".git", "__pycache__", ".venv", "venv",
     ".next", "dist", "build", ".tox", ".mypy_cache", ".pytest_cache",
-    ".bak",
+    ".vscode",
 })
 
 
